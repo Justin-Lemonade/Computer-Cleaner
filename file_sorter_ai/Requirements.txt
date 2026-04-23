@@ -1,0 +1,14 @@
+pillow
+pymupdf
+python-docx
+streamlit
+pandas
+numpy
+scikit-learn
+sqlite-utils
+watchdog
+python-magic-bin; platform_system == "Windows"
+python-magic; platform_system != "Windows"
+tqdm
+PySide6
+
