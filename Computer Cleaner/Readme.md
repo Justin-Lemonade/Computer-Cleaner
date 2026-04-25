@@ -5,16 +5,14 @@ Desktop app for scanning, previewing, and labeling files so you can sort them th
 ## Setup (Windows)
 
 ```powershell
-cd file_sorter_ai
-python -m venv venv
-venv\Scripts\Activate.ps1
-pip install -r Requirements.txt
+cd "Computer Cleaner"
+.\scripts\Setup.ps1
 ```
 
 ## Run (PySide6 desktop UI)
 
 ```powershell
-python App.py
+.\scripts\Run.ps1
 ```
 
 ## Optional: Streamlit prototype UI
