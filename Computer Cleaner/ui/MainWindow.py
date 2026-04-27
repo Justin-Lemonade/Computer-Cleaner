@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from hashlib import sha256
 import os
 from hashlib import sha256
 from pathlib import Path
@@ -24,6 +25,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from Config import CONFIG
+from backend.models.swipe_model import SwipeCreate, SwipeDecision, SwipeSource
+from backend.services.swipe_service import SwipeService
+from database.Db import list_files
+from scanner.ScanFiles import scan_and_store
 from database.Db import list_files, upsert_file
 from logic.LabelHandler import LABEL_ARCHIVE, LABEL_KEEP, LABEL_NOT_NEEDED, save_label
 from preview.PreviewManager import build_preview
@@ -264,6 +270,7 @@ class MainWindow(QMainWindow):
         self._pending_index = 0
         self._is_animating = False
         self._active_animation: QParallelAnimationGroup | None = None
+        self._swipe_service = SwipeService(CONFIG.db_path)
 
         root = QWidget()
         root_layout = QVBoxLayout(root)
@@ -362,6 +369,10 @@ class MainWindow(QMainWindow):
 
     def _build_menu(self) -> QMenu:
         menu = QMenu(self)
+        scan_action = QAction("Scan Folder", self)
+        scan_action.triggered.connect(self._choose_and_scan_folder)
+        menu.addAction(scan_action)
+        menu.addSeparator()
         for action_name in ("Settings", "History", "Search"):
             action = QAction(action_name, self)
             action.triggered.connect(
@@ -562,8 +573,34 @@ class MainWindow(QMainWindow):
         try:
             rows = list_files(limit=400)
             self._files = [dict(row) for row in rows]
+            self._reset_indices()
         except Exception as exc:
             self._files = []
+            self._reset_indices()
+            self._status.setText(f"Database read failed. ({exc})")
+
+        if self._files:
+            return
+
+        self._status.setText("No scanned files found. Use Menu → Scan Folder to start.")
+
+    def _choose_and_scan_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Select folder to scan", str(Path.home()))
+        if not folder:
+            self._status.setText("Folder scan canceled.")
+            return
+        self._scan_folder(Path(folder))
+
+    def _scan_folder(self, folder: Path) -> None:
+        try:
+            scanned = scan_and_store(folder)
+            rows = list_files(limit=400)
+            self._files = [dict(row) for row in rows]
+            self._reset_indices()
+            self._render_current_file()
+            self._status.setText(f"Scan complete: {scanned} files indexed from {folder}.")
+        except Exception as exc:
+            self._status.setText(f"Folder scan failed ({exc})")
             self._status.setText(f"Database read failed. ({exc})")
         self._current_index = 0
 
@@ -595,6 +632,9 @@ class MainWindow(QMainWindow):
     def _current_file(self) -> dict[str, Any]:
         return self._files[self._current_index]
 
+    def _reset_indices(self) -> None:
+        self._current_index = 0
+        self._pending_index = 0
     def _set_empty_state_visible(self, is_visible: bool) -> None:
         self._empty_state.setVisible(is_visible)
         self._preview_card.setVisible(not is_visible)
@@ -667,25 +707,40 @@ class MainWindow(QMainWindow):
             self._status.setText(f"Folder processing failed ({exc})")
 
     def _on_keep(self) -> None:
-        self._handle_decision("KEEP", LABEL_KEEP, QPoint(260, 0))
+        self._handle_decision("KEEP", SwipeDecision.KEEP, QPoint(260, 0))
 
     def _on_archive(self) -> None:
-        self._handle_decision("ARCHIVE", LABEL_ARCHIVE, QPoint(0, -220))
+        self._handle_decision("ARCHIVE", SwipeDecision.ARCHIVE, QPoint(0, -220))
 
     def _on_not_needed(self) -> None:
-        self._handle_decision("NOT NEEDED", LABEL_NOT_NEEDED, QPoint(-260, 0))
+        self._handle_decision("NOT NEEDED", SwipeDecision.DELETE, QPoint(-260, 0))
 
-    def _handle_decision(self, action_name: str, label_name: str, offset: QPoint) -> None:
+    def _handle_decision(self, action_name: str, decision: SwipeDecision, offset: QPoint) -> None:
         if self._is_animating or not self._files:
             return
 
         current = self._current_file()
-        file_id = current.get("id")
-        if isinstance(file_id, int):
+        path = str(current.get("path") or "")
+        filename = str(current.get("filename") or Path(path).name or "unknown")
+        filetype = str(current.get("filetype") or Path(path).suffix.lstrip(".") or "unknown")
+        size = int(current.get("size") or 0)
+
+        if path:
             try:
-                save_label(file_id, label_name)
+                hash_value = self._compute_file_hash(path)
+                self._swipe_service.save_swipe(
+                    SwipeCreate(
+                        file_path=path,
+                        file_name=filename,
+                        file_type=filetype,
+                        file_size=max(size, 0),
+                        file_hash=hash_value,
+                        decision=decision,
+                        source=SwipeSource.HUMAN,
+                    )
+                )
             except Exception as exc:
-                self._status.setText(f"Label save failed ({exc})")
+                self._status.setText(f"Decision save failed ({exc})")
 
         self._pending_index = (self._current_index + 1) % len(self._files)
         self._animate_to_next(action_name, offset)
@@ -802,3 +857,20 @@ class MainWindow(QMainWindow):
             self._status.setText(f"{mode_name} mode layout is staged and not yet active.")
             return
         self._status.setText("Training mode active.")
+
+    def _compute_file_hash(self, raw_path: str) -> str | None:
+        file_path = Path(raw_path)
+        if not file_path.exists() or not file_path.is_file():
+            return None
+
+        digest = sha256()
+        try:
+            with file_path.open("rb") as handle:
+                while True:
+                    block = handle.read(1024 * 1024)
+                    if not block:
+                        break
+                    digest.update(block)
+        except Exception:
+            return None
+        return digest.hexdigest()
