@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QEasingCurve, QPoint, QParallelAnimationGroup, QPropertyAnimation, QRect, QSize, Qt
@@ -14,6 +16,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QPushButton,
+    QFileDialog,
     QSizePolicy,
     QSplitter,
     QToolButton,
@@ -21,8 +24,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from database.Db import list_files
+from database.Db import list_files, upsert_file
 from logic.LabelHandler import LABEL_ARCHIVE, LABEL_KEEP, LABEL_NOT_NEEDED, save_label
+from preview.PreviewManager import build_preview
+from scanner.Metadata import get_basic_metadata
+from scanner.ScanFiles import iter_files, scan_and_store
 from ui.FileCard import FileCard
 from ui.InfoPanel import InfoPanel
 from ui.KeyboardShortcuts import add_shortcut
@@ -257,6 +263,8 @@ class MainWindow(QMainWindow):
         self._preview_effect = QGraphicsOpacityEffect(self._preview_card)
         self._preview_card.setGraphicsEffect(self._preview_effect)
         self._preview_effect.setOpacity(1.0)
+        self._empty_state = self._build_empty_state()
+        self._empty_state.setParent(self._preview_stage)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
@@ -294,6 +302,7 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        self._empty_state.setGeometry(self._preview_rect())
         if not self._is_animating:
             self._preview_card.setGeometry(self._preview_rect())
 
@@ -365,6 +374,45 @@ class MainWindow(QMainWindow):
 
         return dock
 
+    def _build_empty_state(self) -> QFrame:
+        state = QFrame()
+        state.setObjectName("EmptyQueueState")
+
+        layout = QVBoxLayout(state)
+        layout.setContentsMargins(36, 36, 36, 36)
+        layout.setSpacing(16)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        title = QLabel("No files in your queue yet")
+        title.setObjectName("EmptyQueueTitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        hint = QLabel("Pick a folder to scan and generate previews before you start swiping.")
+        hint.setObjectName("EmptyQueueHint")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hint.setWordWrap(True)
+
+        actions = QWidget()
+        actions_layout = QHBoxLayout(actions)
+        actions_layout.setContentsMargins(0, 4, 0, 0)
+        actions_layout.setSpacing(12)
+
+        random_button = _ActionButton("Choose Random Folder", "neutral")
+        random_button.setObjectName("EmptyStateActionButton")
+        random_button.clicked.connect(self._choose_random_folder)
+
+        select_button = _ActionButton("Select", "save")
+        select_button.setObjectName("EmptyStateActionButton")
+        select_button.clicked.connect(self._select_folder)
+
+        actions_layout.addWidget(random_button)
+        actions_layout.addWidget(select_button)
+
+        layout.addWidget(title)
+        layout.addWidget(hint)
+        layout.addWidget(actions, 0, Qt.AlignmentFlag.AlignCenter)
+        return state
+
     def _apply_dark_theme(self) -> None:
         self.setStyleSheet(
             """
@@ -394,6 +442,20 @@ class MainWindow(QMainWindow):
                 background: #171717;
                 border: 1px solid #2f2f2f;
                 border-radius: 12px;
+            }
+            QFrame#EmptyQueueState {
+                background: #171717;
+                border: 1px solid #2f2f2f;
+                border-radius: 16px;
+            }
+            QLabel#EmptyQueueTitle {
+                color: #ffffff;
+                font-size: 24px;
+                font-weight: 700;
+            }
+            QLabel#EmptyQueueHint {
+                color: #b3b3b3;
+                font-size: 13px;
             }
             QPushButton#ActionButton {
                 border: 1px solid #3b3b3b;
@@ -481,47 +543,17 @@ class MainWindow(QMainWindow):
             self._files = [dict(row) for row in rows]
         except Exception as exc:
             self._files = []
-            self._status.setText(f"Database read failed. Using local sample cards. ({exc})")
-
-        if self._files:
-            self._current_index = 0
-            return
-
-        self._files = [
-            {
-                "id": None,
-                "filename": "Budget_Report_2024.pdf",
-                "path": r"C:\Users\You\Downloads\Budget_Report_2024.pdf",
-                "filetype": "pdf",
-                "size": 328412,
-                "created_date": "2024-05-10T08:12:00",
-                "modified_date": "2024-12-20T17:24:00",
-            },
-            {
-                "id": None,
-                "filename": "Design_Notes.docx",
-                "path": r"C:\Users\You\Documents\Design_Notes.docx",
-                "filetype": "docx",
-                "size": 87321,
-                "created_date": "2022-11-01T13:15:00",
-                "modified_date": "2023-02-06T11:03:00",
-            },
-            {
-                "id": None,
-                "filename": "Screenshot_4932.png",
-                "path": r"C:\Users\You\Pictures\Screenshot_4932.png",
-                "filetype": "png",
-                "size": 1892240,
-                "created_date": "2023-10-18T19:32:00",
-                "modified_date": "2023-10-18T19:32:00",
-            },
-        ]
+            self._status.setText(f"Database read failed. ({exc})")
         self._current_index = 0
 
     def _render_current_file(self, *, action_text: str | None = None) -> None:
+        self._empty_state.setGeometry(self._preview_rect())
         if not self._files:
+            self._set_empty_state_visible(True)
+            self._subtitle.setText("Training mode | Queue is empty")
             return
 
+        self._set_empty_state_visible(False)
         current = self._files[self._current_index]
         total = len(self._files)
         self._preview_card.set_file(current)
@@ -541,6 +573,77 @@ class MainWindow(QMainWindow):
 
     def _current_file(self) -> dict[str, Any]:
         return self._files[self._current_index]
+
+    def _set_empty_state_visible(self, is_visible: bool) -> None:
+        self._empty_state.setVisible(is_visible)
+        self._preview_card.setVisible(not is_visible)
+        self._action_dock.setEnabled(not is_visible)
+
+    def _common_user_folders(self) -> list[Path]:
+        home = Path.home()
+        candidates = [
+            home / "Desktop",
+            home / "Documents",
+            home / "Downloads",
+            home / "Pictures",
+            home / "Videos",
+            home / "Music",
+        ]
+        return [folder for folder in candidates if folder.exists() and folder.is_dir()]
+
+    def _deterministic_folder_choice(self) -> Path | None:
+        folders = sorted(self._common_user_folders(), key=lambda item: str(item).lower())
+        if not folders:
+            return None
+        digest = sha256(str(Path.home()).encode("utf-8")).hexdigest()
+        index = int(digest[:8], 16) % len(folders)
+        return folders[index]
+
+    def _select_folder(self) -> None:
+        selected = QFileDialog.getExistingDirectory(self, "Select folder to scan", str(Path.home()))
+        if not selected:
+            self._status.setText("Folder selection cancelled.")
+            return
+        self._scan_folder_and_prepare_queue(Path(selected))
+
+    def _choose_random_folder(self) -> None:
+        selected = self._deterministic_folder_choice()
+        if selected is None:
+            self._status.setText("No common user folders were found.")
+            return
+        self._scan_folder_and_prepare_queue(selected)
+
+    def _scan_folder_and_prepare_queue(self, folder: Path) -> None:
+        folder = folder.expanduser()
+        if not folder.exists() or not folder.is_dir():
+            self._status.setText(f"Invalid folder selected: {folder}")
+            return
+
+        try:
+            scanned_count = scan_and_store(folder)
+            for file_path in iter_files(folder):
+                metadata = get_basic_metadata(file_path)
+                preview_path = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
+                upsert_file(
+                    {
+                        "path": str(metadata.path),
+                        "filename": metadata.filename,
+                        "filetype": metadata.filetype,
+                        "mime_type": metadata.mime_type,
+                        "size": metadata.size,
+                        "created_date": metadata.created_date,
+                        "modified_date": metadata.modified_date,
+                        "preview_path": str(preview_path) if preview_path else None,
+                    }
+                )
+            self._load_files()
+            self._render_current_file()
+            if self._files:
+                self._status.setText(f"Queued {len(self._files)} files after scanning {scanned_count} files from {folder}.")
+            else:
+                self._status.setText("Scan completed but no queueable files were found.")
+        except Exception as exc:
+            self._status.setText(f"Folder processing failed ({exc})")
 
     def _on_keep(self) -> None:
         self._handle_decision("KEEP", LABEL_KEEP, QPoint(260, 0))
@@ -656,6 +759,9 @@ class MainWindow(QMainWindow):
         self._status.setText("Details expanded." if visible else "Details hidden.")
 
     def _open_file(self) -> None:
+        if not self._files:
+            self._status.setText("Queue is empty.")
+            return
         current = self._current_file()
         raw_path = current.get("path")
         if not isinstance(raw_path, str) or not raw_path:
