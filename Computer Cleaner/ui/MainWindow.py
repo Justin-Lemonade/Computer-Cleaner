@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 import os
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,11 @@ from backend.models.swipe_model import SwipeCreate, SwipeDecision, SwipeSource
 from backend.services.swipe_service import SwipeService
 from database.Db import list_files
 from scanner.ScanFiles import scan_and_store
+from database.Db import list_files, upsert_file
+from logic.LabelHandler import LABEL_ARCHIVE, LABEL_KEEP, LABEL_NOT_NEEDED, save_label
+from preview.PreviewManager import build_preview
+from scanner.Metadata import get_basic_metadata
+from scanner.ScanFiles import iter_files, scan_and_store
 from ui.FileCard import FileCard
 from ui.InfoPanel import InfoPanel
 from ui.KeyboardShortcuts import add_shortcut
@@ -45,7 +51,6 @@ class _ActionButton(QPushButton):
     def __init__(self, text: str, role: str) -> None:
         super().__init__(text)
         self._base_size = QSize(138, 46)
-        self._hover_size = QSize(146, 50)
         self._role = role
         self.setFixedSize(self._base_size)
         self._shadow = QGraphicsDropShadowEffect(self)
@@ -55,7 +60,6 @@ class _ActionButton(QPushButton):
         self.setGraphicsEffect(self._shadow)
 
     def enterEvent(self, event) -> None:
-        self.setFixedSize(self._hover_size)
         self._shadow.setBlurRadius(34)
         self._shadow.setOffset(0, 12)
         color = QColor(self._ROLE_COLORS.get(self._role, "#8e8e8e"))
@@ -64,7 +68,6 @@ class _ActionButton(QPushButton):
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self.setFixedSize(self._base_size)
         self._shadow.setBlurRadius(16)
         self._shadow.setOffset(0, 10)
         self._shadow.setColor(QColor(0, 0, 0, 0))
@@ -83,6 +86,41 @@ class _AlignedMenuButton(QToolButton):
 
 
 class _ModeSelector(QFrame):
+    _ACTIVE_MODE_STYLE = (
+        "QPushButton {"
+        "border: 1px solid #19c37d;"
+        "border-radius: 10px;"
+        "background: #121212;"
+        "color: #ffffff;"
+        "font-size: 12px;"
+        "font-weight: 600;"
+        "padding: 8px 12px;"
+        "text-align: center;"
+        "}"
+        "QPushButton:hover {"
+        "border: 1px solid #19c37d;"
+        "background: #1a1a1a;"
+        "color: #ffffff;"
+        "}"
+    )
+    _INACTIVE_MODE_STYLE = (
+        "QPushButton {"
+        "border: 1px solid #2f2f2f;"
+        "border-radius: 10px;"
+        "background: #121212;"
+        "color: #ffffff;"
+        "font-size: 12px;"
+        "font-weight: 600;"
+        "padding: 8px 12px;"
+        "text-align: center;"
+        "}"
+        "QPushButton:hover {"
+        "background: #1a1a1a;"
+        "border: 1px solid #19c37d;"
+        "color: #19c37d;"
+        "}"
+    )
+
     def __init__(self, on_mode_clicked, button_size: QSize) -> None:
         super().__init__()
         self._on_mode_clicked = on_mode_clicked
@@ -129,26 +167,6 @@ class _ModeSelector(QFrame):
                 border: 1px solid #2f2f2f;
                 border-radius: 12px;
             }
-            QPushButton#ModeButton {
-                border: 1px solid #2f2f2f;
-                border-radius: 10px;
-                background: #121212;
-                color: #ffffff;
-                font-size: 12px;
-                font-weight: 600;
-                padding: 8px 12px;
-                text-align: center;
-            }
-            QPushButton#ModeButton:hover {
-                background: #1a1a1a;
-                border-color: #19c37d;
-                color: #19c37d;
-            }
-            QPushButton#ModeButton[selected="true"] {
-                background: #121212;
-                border-color: #19c37d;
-                color: #ffffff;
-            }
             """
         )
 
@@ -164,9 +182,26 @@ class _ModeSelector(QFrame):
 
     def _select_mode(self, mode_name: str) -> None:
         self._active_mode = mode_name
+        self._apply_mode_visual_state()
         self._on_mode_clicked(mode_name)
         self._expanded = False
         self._arrange(immediate=False)
+
+    def _apply_mode_visual_state(self, *, sync_opacity: bool = False) -> None:
+        is_collapsed = not self._expanded
+        for mode, button in self._buttons.items():
+            is_active = mode == self._active_mode
+            should_enable = self._expanded or is_active
+            target_opacity = 1.0 if self._expanded or is_active else 0.0
+
+            button.setEnabled(should_enable)
+            button.setStyleSheet(self._ACTIVE_MODE_STYLE if is_active else self._INACTIVE_MODE_STYLE)
+            if sync_opacity:
+                self._effects[mode].setOpacity(target_opacity)
+            elif is_collapsed and is_active:
+                self._effects[mode].setOpacity(1.0)
+            else:
+                continue
 
     def _arrange(self, *, immediate: bool) -> None:
         others = [mode for mode in self._modes if mode != self._active_mode]
@@ -175,19 +210,15 @@ class _ModeSelector(QFrame):
             others[1]: self._padding + self._button_size.width() + self._spacing,
             self._active_mode: self._stack_x,
         }
+        self._apply_mode_visual_state()
 
         if immediate:
             self.setMinimumWidth(self._collapsed_width if not self._expanded else self._expanded_width)
             self.setMaximumWidth(self._collapsed_width if not self._expanded else self._expanded_width)
+            self._apply_mode_visual_state(sync_opacity=True)
             for mode, button in self._buttons.items():
                 x = left_positions[mode] if self._expanded else self._stack_x
                 button.move(x, self._padding)
-                opacity = 1.0 if self._expanded or mode == self._active_mode else 0.0
-                self._effects[mode].setOpacity(opacity)
-                button.setEnabled(self._expanded or mode == self._active_mode)
-                button.setProperty("selected", mode == self._active_mode)
-                button.style().unpolish(button)
-                button.style().polish(button)
             return
 
         group = QParallelAnimationGroup(self)
@@ -224,11 +255,6 @@ class _ModeSelector(QFrame):
             fade_anim.setEndValue(target_opacity)
             group.addAnimation(fade_anim)
 
-            button.setEnabled(self._expanded or mode == self._active_mode)
-            button.setProperty("selected", mode == self._active_mode)
-            button.style().unpolish(button)
-            button.style().polish(button)
-
         self._active_animation = group
         group.start()
 
@@ -264,6 +290,8 @@ class MainWindow(QMainWindow):
         self._preview_effect = QGraphicsOpacityEffect(self._preview_card)
         self._preview_card.setGraphicsEffect(self._preview_effect)
         self._preview_effect.setOpacity(1.0)
+        self._empty_state = self._build_empty_state()
+        self._empty_state.setParent(self._preview_stage)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
@@ -301,6 +329,7 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        self._empty_state.setGeometry(self._preview_rect())
         if not self._is_animating:
             self._preview_card.setGeometry(self._preview_rect())
 
@@ -352,12 +381,13 @@ class MainWindow(QMainWindow):
             menu.addAction(action)
         return menu
 
-    def _build_action_dock(self) -> QFrame:
-        dock = QFrame()
+    def _build_action_dock(self) -> QWidget:
+        dock = QWidget()
         dock.setObjectName("ActionDock")
         layout = QHBoxLayout(dock)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         specs = [
             ("DELETE", "delete", self._on_not_needed),
@@ -375,6 +405,45 @@ class MainWindow(QMainWindow):
             layout.addWidget(button)
 
         return dock
+
+    def _build_empty_state(self) -> QFrame:
+        state = QFrame()
+        state.setObjectName("EmptyQueueState")
+
+        layout = QVBoxLayout(state)
+        layout.setContentsMargins(36, 36, 36, 36)
+        layout.setSpacing(16)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        title = QLabel("No files in your queue yet")
+        title.setObjectName("EmptyQueueTitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        hint = QLabel("Pick a folder to scan and generate previews before you start swiping.")
+        hint.setObjectName("EmptyQueueHint")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hint.setWordWrap(True)
+
+        actions = QWidget()
+        actions_layout = QHBoxLayout(actions)
+        actions_layout.setContentsMargins(0, 4, 0, 0)
+        actions_layout.setSpacing(12)
+
+        random_button = _ActionButton("Choose Random Folder", "neutral")
+        random_button.setObjectName("EmptyStateActionButton")
+        random_button.clicked.connect(self._choose_random_folder)
+
+        select_button = _ActionButton("Select", "save")
+        select_button.setObjectName("EmptyStateActionButton")
+        select_button.clicked.connect(self._select_folder)
+
+        actions_layout.addWidget(random_button)
+        actions_layout.addWidget(select_button)
+
+        layout.addWidget(title)
+        layout.addWidget(hint)
+        layout.addWidget(actions, 0, Qt.AlignmentFlag.AlignCenter)
+        return state
 
     def _apply_dark_theme(self) -> None:
         self.setStyleSheet(
@@ -401,10 +470,24 @@ class MainWindow(QMainWindow):
                 color: #b3b3b3;
                 font-size: 12px;
             }
-            QFrame#ActionDock {
+            QWidget#ActionDock {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
+            }
+            QFrame#EmptyQueueState {
                 background: #171717;
                 border: 1px solid #2f2f2f;
-                border-radius: 12px;
+                border-radius: 16px;
+            }
+            QLabel#EmptyQueueTitle {
+                color: #ffffff;
+                font-size: 24px;
+                font-weight: 700;
+            }
+            QLabel#EmptyQueueHint {
+                color: #b3b3b3;
+                font-size: 13px;
             }
             QPushButton#ActionButton {
                 border: 1px solid #3b3b3b;
@@ -518,11 +601,17 @@ class MainWindow(QMainWindow):
             self._status.setText(f"Scan complete: {scanned} files indexed from {folder}.")
         except Exception as exc:
             self._status.setText(f"Folder scan failed ({exc})")
+            self._status.setText(f"Database read failed. ({exc})")
+        self._current_index = 0
 
     def _render_current_file(self, *, action_text: str | None = None) -> None:
+        self._empty_state.setGeometry(self._preview_rect())
         if not self._files:
+            self._set_empty_state_visible(True)
+            self._subtitle.setText("Training mode | Queue is empty")
             return
 
+        self._set_empty_state_visible(False)
         current = self._files[self._current_index]
         total = len(self._files)
         self._preview_card.set_file(current)
@@ -546,6 +635,76 @@ class MainWindow(QMainWindow):
     def _reset_indices(self) -> None:
         self._current_index = 0
         self._pending_index = 0
+    def _set_empty_state_visible(self, is_visible: bool) -> None:
+        self._empty_state.setVisible(is_visible)
+        self._preview_card.setVisible(not is_visible)
+        self._action_dock.setEnabled(not is_visible)
+
+    def _common_user_folders(self) -> list[Path]:
+        home = Path.home()
+        candidates = [
+            home / "Desktop",
+            home / "Documents",
+            home / "Downloads",
+            home / "Pictures",
+            home / "Videos",
+            home / "Music",
+        ]
+        return [folder for folder in candidates if folder.exists() and folder.is_dir()]
+
+    def _deterministic_folder_choice(self) -> Path | None:
+        folders = sorted(self._common_user_folders(), key=lambda item: str(item).lower())
+        if not folders:
+            return None
+        digest = sha256(str(Path.home()).encode("utf-8")).hexdigest()
+        index = int(digest[:8], 16) % len(folders)
+        return folders[index]
+
+    def _select_folder(self) -> None:
+        selected = QFileDialog.getExistingDirectory(self, "Select folder to scan", str(Path.home()))
+        if not selected:
+            self._status.setText("Folder selection cancelled.")
+            return
+        self._scan_folder_and_prepare_queue(Path(selected))
+
+    def _choose_random_folder(self) -> None:
+        selected = self._deterministic_folder_choice()
+        if selected is None:
+            self._status.setText("No common user folders were found.")
+            return
+        self._scan_folder_and_prepare_queue(selected)
+
+    def _scan_folder_and_prepare_queue(self, folder: Path) -> None:
+        folder = folder.expanduser()
+        if not folder.exists() or not folder.is_dir():
+            self._status.setText(f"Invalid folder selected: {folder}")
+            return
+
+        try:
+            scanned_count = scan_and_store(folder)
+            for file_path in iter_files(folder):
+                metadata = get_basic_metadata(file_path)
+                preview_path = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
+                upsert_file(
+                    {
+                        "path": str(metadata.path),
+                        "filename": metadata.filename,
+                        "filetype": metadata.filetype,
+                        "mime_type": metadata.mime_type,
+                        "size": metadata.size,
+                        "created_date": metadata.created_date,
+                        "modified_date": metadata.modified_date,
+                        "preview_path": str(preview_path) if preview_path else None,
+                    }
+                )
+            self._load_files()
+            self._render_current_file()
+            if self._files:
+                self._status.setText(f"Queued {len(self._files)} files after scanning {scanned_count} files from {folder}.")
+            else:
+                self._status.setText("Scan completed but no queueable files were found.")
+        except Exception as exc:
+            self._status.setText(f"Folder processing failed ({exc})")
 
     def _on_keep(self) -> None:
         self._handle_decision("KEEP", SwipeDecision.KEEP, QPoint(260, 0))
@@ -676,6 +835,9 @@ class MainWindow(QMainWindow):
         self._status.setText("Details expanded." if visible else "Details hidden.")
 
     def _open_file(self) -> None:
+        if not self._files:
+            self._status.setText("Queue is empty.")
+            return
         current = self._current_file()
         raw_path = current.get("path")
         if not isinstance(raw_path, str) or not raw_path:
