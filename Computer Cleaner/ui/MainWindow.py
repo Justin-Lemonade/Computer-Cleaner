@@ -4,9 +4,10 @@ import os
 from typing import Any
 
 from PySide6.QtCore import QEasingCurve, QPoint, QParallelAnimationGroup, QPropertyAnimation, QRect, QSize, Qt
-from PySide6.QtGui import QAction, QFont
+from PySide6.QtGui import QAction, QColor, QFont
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
@@ -27,11 +28,59 @@ from ui.InfoPanel import InfoPanel
 from ui.KeyboardShortcuts import add_shortcut
 
 
+class _ActionButton(QPushButton):
+    _ROLE_COLORS = {
+        "save": "#19c37d",
+        "archive": "#e3ad2b",
+        "delete": "#ff5b5b",
+        "neutral": "#8e8e8e",
+    }
+
+    def __init__(self, text: str, role: str) -> None:
+        super().__init__(text)
+        self._base_size = QSize(138, 46)
+        self._hover_size = QSize(146, 50)
+        self._role = role
+        self.setFixedSize(self._base_size)
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setOffset(0, 10)
+        self._shadow.setBlurRadius(16)
+        self._shadow.setColor(QColor(0, 0, 0, 0))
+        self.setGraphicsEffect(self._shadow)
+
+    def enterEvent(self, event) -> None:
+        self.setFixedSize(self._hover_size)
+        self._shadow.setBlurRadius(34)
+        self._shadow.setOffset(0, 12)
+        color = QColor(self._ROLE_COLORS.get(self._role, "#8e8e8e"))
+        color.setAlpha(170)
+        self._shadow.setColor(color)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self.setFixedSize(self._base_size)
+        self._shadow.setBlurRadius(16)
+        self._shadow.setOffset(0, 10)
+        self._shadow.setColor(QColor(0, 0, 0, 0))
+        super().leaveEvent(event)
+
+
+class _AlignedMenuButton(QToolButton):
+    def showMenu(self) -> None:
+        menu = self.menu()
+        if menu is None:
+            return
+        menu.ensurePolished()
+        menu_size = menu.sizeHint()
+        local_point = self.rect().bottomRight() - QPoint(menu_size.width(), -4)
+        menu.exec(self.mapToGlobal(local_point))
+
+
 class _ModeSelector(QFrame):
     def __init__(self, on_mode_clicked, button_size: QSize) -> None:
         super().__init__()
         self._on_mode_clicked = on_mode_clicked
-        self._modes = ["Training", "Review", "Sorting"]
+        self._modes = ["Training", "Testing", "Automation"]
         self._active_mode = "Training"
         self._button_size = button_size
         self._padding = 8
@@ -77,20 +126,20 @@ class _ModeSelector(QFrame):
             QPushButton#ModeButton {
                 border: 1px solid #2f2f2f;
                 border-radius: 10px;
-                background: #212121;
-                color: #b3b3b3;
+                background: #121212;
+                color: #ffffff;
                 font-size: 12px;
                 font-weight: 600;
                 padding: 8px 12px;
                 text-align: center;
             }
             QPushButton#ModeButton:hover {
-                background: #2a2a2a;
+                background: #1a1a1a;
                 border-color: #19c37d;
-                color: #ffffff;
+                color: #19c37d;
             }
             QPushButton#ModeButton[selected="true"] {
-                background: #1f2c26;
+                background: #121212;
                 border-color: #19c37d;
                 color: #ffffff;
             }
@@ -270,7 +319,7 @@ class MainWindow(QMainWindow):
         title_layout.addWidget(title)
         title_layout.addWidget(self._subtitle)
 
-        menu_button = QToolButton()
+        menu_button = _AlignedMenuButton()
         menu_button.setObjectName("MenuButton")
         menu_button.setText("Menu")
         menu_button.setFixedSize(96, 40)
@@ -300,17 +349,16 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         specs = [
-            ("KEEP", "primary", self._on_keep),
-            ("ARCHIVE", "secondary", self._on_archive),
-            ("NOT NEEDED", "danger", self._on_not_needed),
-            ("MORE INFO", "secondary", self._toggle_details),
-            ("OPEN FILE", "secondary", self._open_file),
+            ("DELETE", "delete", self._on_not_needed),
+            ("ARCHIVE", "archive", self._on_archive),
+            ("MORE INFO", "neutral", self._toggle_details),
+            ("OPEN FILE", "neutral", self._open_file),
+            ("SAVE", "save", self._on_keep),
         ]
         for text, role, callback in specs:
-            button = QPushButton(text)
+            button = _ActionButton(text, role)
             button.setObjectName("ActionButton")
             button.setProperty("role", role)
-            button.setFixedSize(138, 46)
             button.clicked.connect(callback)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             layout.addWidget(button)
@@ -348,30 +396,38 @@ class MainWindow(QMainWindow):
                 border-radius: 12px;
             }
             QPushButton#ActionButton {
-                border: 1px solid #2f2f2f;
+                border: 1px solid #3b3b3b;
                 border-radius: 10px;
-                background: #212121;
+                background: #0e0e0e;
                 color: #ffffff;
                 font-size: 12px;
                 font-weight: 600;
                 text-align: center;
                 padding: 8px 10px;
             }
-            QPushButton#ActionButton:hover {
-                background: #2a2a2a;
+            QPushButton#ActionButton[role="neutral"] {
+                border-color: #5a5a5a;
+            }
+            QPushButton#ActionButton[role="neutral"]:hover {
+                color: #d1d1d1;
+            }
+            QPushButton#ActionButton[role="save"] {
                 border-color: #19c37d;
             }
-            QPushButton#ActionButton[role="primary"] {
-                background: #1f2c26;
-                border-color: #19c37d;
+            QPushButton#ActionButton[role="save"]:hover {
+                color: #19c37d;
             }
-            QPushButton#ActionButton[role="danger"] {
-                background: #322126;
-                border-color: #5b2e36;
+            QPushButton#ActionButton[role="archive"] {
+                border-color: #e3ad2b;
             }
-            QPushButton#ActionButton[role="danger"]:hover {
-                background: #3a242a;
-                border-color: #6a3640;
+            QPushButton#ActionButton[role="archive"]:hover {
+                color: #e3ad2b;
+            }
+            QPushButton#ActionButton[role="delete"] {
+                border-color: #ff5b5b;
+            }
+            QPushButton#ActionButton[role="delete"]:hover {
+                color: #ff5b5b;
             }
             QToolButton#MenuButton {
                 border: 1px solid #2f2f2f;
@@ -395,6 +451,7 @@ class MainWindow(QMainWindow):
                 color: #ffffff;
                 border: 1px solid #2f2f2f;
                 padding: 6px;
+                margin-top: 6px;
             }
             QMenu::item {
                 background: transparent;
