@@ -39,7 +39,6 @@ class _ActionButton(QPushButton):
     def __init__(self, text: str, role: str) -> None:
         super().__init__(text)
         self._base_size = QSize(138, 46)
-        self._hover_size = QSize(146, 50)
         self._role = role
         self.setFixedSize(self._base_size)
         self._shadow = QGraphicsDropShadowEffect(self)
@@ -49,7 +48,6 @@ class _ActionButton(QPushButton):
         self.setGraphicsEffect(self._shadow)
 
     def enterEvent(self, event) -> None:
-        self.setFixedSize(self._hover_size)
         self._shadow.setBlurRadius(34)
         self._shadow.setOffset(0, 12)
         color = QColor(self._ROLE_COLORS.get(self._role, "#8e8e8e"))
@@ -58,7 +56,6 @@ class _ActionButton(QPushButton):
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self.setFixedSize(self._base_size)
         self._shadow.setBlurRadius(16)
         self._shadow.setOffset(0, 10)
         self._shadow.setColor(QColor(0, 0, 0, 0))
@@ -341,12 +338,13 @@ class MainWindow(QMainWindow):
             menu.addAction(action)
         return menu
 
-    def _build_action_dock(self) -> QFrame:
-        dock = QFrame()
+    def _build_action_dock(self) -> QWidget:
+        dock = QWidget()
         dock.setObjectName("ActionDock")
         layout = QHBoxLayout(dock)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         specs = [
             ("DELETE", "delete", self._on_not_needed),
@@ -390,10 +388,10 @@ class MainWindow(QMainWindow):
                 color: #b3b3b3;
                 font-size: 12px;
             }
-            QFrame#ActionDock {
-                background: #171717;
-                border: 1px solid #2f2f2f;
-                border-radius: 12px;
+            QWidget#ActionDock {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
             }
             QPushButton#ActionButton {
                 border: 1px solid #3b3b3b;
