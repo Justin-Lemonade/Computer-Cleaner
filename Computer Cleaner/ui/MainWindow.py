@@ -77,6 +77,41 @@ class _AlignedMenuButton(QToolButton):
 
 
 class _ModeSelector(QFrame):
+    _ACTIVE_MODE_STYLE = (
+        "QPushButton {"
+        "border: 1px solid #19c37d;"
+        "border-radius: 10px;"
+        "background: #121212;"
+        "color: #ffffff;"
+        "font-size: 12px;"
+        "font-weight: 600;"
+        "padding: 8px 12px;"
+        "text-align: center;"
+        "}"
+        "QPushButton:hover {"
+        "border: 1px solid #19c37d;"
+        "background: #1a1a1a;"
+        "color: #ffffff;"
+        "}"
+    )
+    _INACTIVE_MODE_STYLE = (
+        "QPushButton {"
+        "border: 1px solid #2f2f2f;"
+        "border-radius: 10px;"
+        "background: #121212;"
+        "color: #ffffff;"
+        "font-size: 12px;"
+        "font-weight: 600;"
+        "padding: 8px 12px;"
+        "text-align: center;"
+        "}"
+        "QPushButton:hover {"
+        "background: #1a1a1a;"
+        "border: 1px solid #19c37d;"
+        "color: #19c37d;"
+        "}"
+    )
+
     def __init__(self, on_mode_clicked, button_size: QSize) -> None:
         super().__init__()
         self._on_mode_clicked = on_mode_clicked
@@ -123,26 +158,6 @@ class _ModeSelector(QFrame):
                 border: 1px solid #2f2f2f;
                 border-radius: 12px;
             }
-            QPushButton#ModeButton {
-                border: 1px solid #2f2f2f;
-                border-radius: 10px;
-                background: #121212;
-                color: #ffffff;
-                font-size: 12px;
-                font-weight: 600;
-                padding: 8px 12px;
-                text-align: center;
-            }
-            QPushButton#ModeButton:hover {
-                background: #1a1a1a;
-                border-color: #19c37d;
-                color: #19c37d;
-            }
-            QPushButton#ModeButton[selected="true"] {
-                background: #121212;
-                border-color: #19c37d;
-                color: #ffffff;
-            }
             """
         )
 
@@ -158,9 +173,26 @@ class _ModeSelector(QFrame):
 
     def _select_mode(self, mode_name: str) -> None:
         self._active_mode = mode_name
+        self._apply_mode_visual_state()
         self._on_mode_clicked(mode_name)
         self._expanded = False
         self._arrange(immediate=False)
+
+    def _apply_mode_visual_state(self, *, sync_opacity: bool = False) -> None:
+        is_collapsed = not self._expanded
+        for mode, button in self._buttons.items():
+            is_active = mode == self._active_mode
+            should_enable = self._expanded or is_active
+            target_opacity = 1.0 if self._expanded or is_active else 0.0
+
+            button.setEnabled(should_enable)
+            button.setStyleSheet(self._ACTIVE_MODE_STYLE if is_active else self._INACTIVE_MODE_STYLE)
+            if sync_opacity:
+                self._effects[mode].setOpacity(target_opacity)
+            elif is_collapsed and is_active:
+                self._effects[mode].setOpacity(1.0)
+            else:
+                continue
 
     def _arrange(self, *, immediate: bool) -> None:
         others = [mode for mode in self._modes if mode != self._active_mode]
@@ -169,19 +201,15 @@ class _ModeSelector(QFrame):
             others[1]: self._padding + self._button_size.width() + self._spacing,
             self._active_mode: self._stack_x,
         }
+        self._apply_mode_visual_state()
 
         if immediate:
             self.setMinimumWidth(self._collapsed_width if not self._expanded else self._expanded_width)
             self.setMaximumWidth(self._collapsed_width if not self._expanded else self._expanded_width)
+            self._apply_mode_visual_state(sync_opacity=True)
             for mode, button in self._buttons.items():
                 x = left_positions[mode] if self._expanded else self._stack_x
                 button.move(x, self._padding)
-                opacity = 1.0 if self._expanded or mode == self._active_mode else 0.0
-                self._effects[mode].setOpacity(opacity)
-                button.setEnabled(self._expanded or mode == self._active_mode)
-                button.setProperty("selected", mode == self._active_mode)
-                button.style().unpolish(button)
-                button.style().polish(button)
             return
 
         group = QParallelAnimationGroup(self)
@@ -217,11 +245,6 @@ class _ModeSelector(QFrame):
             target_opacity = 1.0 if self._expanded or mode == self._active_mode else 0.0
             fade_anim.setEndValue(target_opacity)
             group.addAnimation(fade_anim)
-
-            button.setEnabled(self._expanded or mode == self._active_mode)
-            button.setProperty("selected", mode == self._active_mode)
-            button.style().unpolish(button)
-            button.style().polish(button)
 
         self._active_animation = group
         group.start()
