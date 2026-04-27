@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from hashlib import sha256
 import os
 from pathlib import Path
 from typing import Any
@@ -489,12 +490,13 @@ class MainWindow(QMainWindow):
         try:
             rows = list_files(limit=400)
             self._files = [dict(row) for row in rows]
+            self._reset_indices()
         except Exception as exc:
             self._files = []
+            self._reset_indices()
             self._status.setText(f"Database read failed. ({exc})")
 
         if self._files:
-            self._current_index = 0
             return
 
         self._status.setText("No scanned files found. Use Menu → Scan Folder to start.")
@@ -511,7 +513,7 @@ class MainWindow(QMainWindow):
             scanned = scan_and_store(folder)
             rows = list_files(limit=400)
             self._files = [dict(row) for row in rows]
-            self._current_index = 0
+            self._reset_indices()
             self._render_current_file()
             self._status.setText(f"Scan complete: {scanned} files indexed from {folder}.")
         except Exception as exc:
@@ -541,6 +543,10 @@ class MainWindow(QMainWindow):
     def _current_file(self) -> dict[str, Any]:
         return self._files[self._current_index]
 
+    def _reset_indices(self) -> None:
+        self._current_index = 0
+        self._pending_index = 0
+
     def _on_keep(self) -> None:
         self._handle_decision("KEEP", SwipeDecision.KEEP, QPoint(260, 0))
 
@@ -562,12 +568,14 @@ class MainWindow(QMainWindow):
 
         if path:
             try:
+                hash_value = self._compute_file_hash(path)
                 self._swipe_service.save_swipe(
                     SwipeCreate(
                         file_path=path,
                         file_name=filename,
                         file_type=filetype,
                         file_size=max(size, 0),
+                        file_hash=hash_value,
                         decision=decision,
                         source=SwipeSource.HUMAN,
                     )
@@ -687,3 +695,20 @@ class MainWindow(QMainWindow):
             self._status.setText(f"{mode_name} mode layout is staged and not yet active.")
             return
         self._status.setText("Training mode active.")
+
+    def _compute_file_hash(self, raw_path: str) -> str | None:
+        file_path = Path(raw_path)
+        if not file_path.exists() or not file_path.is_file():
+            return None
+
+        digest = sha256()
+        try:
+            with file_path.open("rb") as handle:
+                while True:
+                    block = handle.read(1024 * 1024)
+                    if not block:
+                        break
+                    digest.update(block)
+        except Exception:
+            return None
+        return digest.hexdigest()
