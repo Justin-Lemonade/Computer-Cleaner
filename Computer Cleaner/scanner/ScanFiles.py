@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable
 
 from database.Db import upsert_file
+from preview.PreviewManager import build_preview
 from scanner.Metadata import get_basic_metadata, is_probably_hidden
 
 
@@ -20,6 +21,7 @@ def scan_and_store(folder: Path, *, include_hidden: bool = False) -> int:
     count = 0
     for path in iter_files(folder, include_hidden=include_hidden):
         meta = get_basic_metadata(path)
+        preview_path = build_preview(path, mime_type=meta.mime_type, filetype=meta.filetype)
         upsert_file(
             {
                 "path": str(meta.path),
@@ -29,7 +31,7 @@ def scan_and_store(folder: Path, *, include_hidden: bool = False) -> int:
                 "size": meta.size,
                 "created_date": meta.created_date,
                 "modified_date": meta.modified_date,
-                "preview_path": None,
+                "preview_path": str(preview_path) if preview_path else None,
             }
         )
         count += 1

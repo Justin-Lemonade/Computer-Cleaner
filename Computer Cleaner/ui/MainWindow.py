@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QEasingCurve, QPoint, QParallelAnimationGroup, QPropertyAnimation, QRect, QSize, Qt
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QPushButton,
+    QFileDialog,
     QSizePolicy,
     QSplitter,
     QToolButton,
@@ -21,8 +23,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from Config import CONFIG
+from backend.models.swipe_model import SwipeCreate, SwipeDecision, SwipeSource
+from backend.services.swipe_service import SwipeService
 from database.Db import list_files
-from logic.LabelHandler import LABEL_ARCHIVE, LABEL_KEEP, LABEL_NOT_NEEDED, save_label
+from scanner.ScanFiles import scan_and_store
 from ui.FileCard import FileCard
 from ui.InfoPanel import InfoPanel
 from ui.KeyboardShortcuts import add_shortcut
@@ -238,6 +243,7 @@ class MainWindow(QMainWindow):
         self._pending_index = 0
         self._is_animating = False
         self._active_animation: QParallelAnimationGroup | None = None
+        self._swipe_service = SwipeService(CONFIG.db_path)
 
         root = QWidget()
         root_layout = QVBoxLayout(root)
@@ -333,6 +339,10 @@ class MainWindow(QMainWindow):
 
     def _build_menu(self) -> QMenu:
         menu = QMenu(self)
+        scan_action = QAction("Scan Folder", self)
+        scan_action.triggered.connect(self._choose_and_scan_folder)
+        menu.addAction(scan_action)
+        menu.addSeparator()
         for action_name in ("Settings", "History", "Search"):
             action = QAction(action_name, self)
             action.triggered.connect(
@@ -481,42 +491,31 @@ class MainWindow(QMainWindow):
             self._files = [dict(row) for row in rows]
         except Exception as exc:
             self._files = []
-            self._status.setText(f"Database read failed. Using local sample cards. ({exc})")
+            self._status.setText(f"Database read failed. ({exc})")
 
         if self._files:
             self._current_index = 0
             return
 
-        self._files = [
-            {
-                "id": None,
-                "filename": "Budget_Report_2024.pdf",
-                "path": r"C:\Users\You\Downloads\Budget_Report_2024.pdf",
-                "filetype": "pdf",
-                "size": 328412,
-                "created_date": "2024-05-10T08:12:00",
-                "modified_date": "2024-12-20T17:24:00",
-            },
-            {
-                "id": None,
-                "filename": "Design_Notes.docx",
-                "path": r"C:\Users\You\Documents\Design_Notes.docx",
-                "filetype": "docx",
-                "size": 87321,
-                "created_date": "2022-11-01T13:15:00",
-                "modified_date": "2023-02-06T11:03:00",
-            },
-            {
-                "id": None,
-                "filename": "Screenshot_4932.png",
-                "path": r"C:\Users\You\Pictures\Screenshot_4932.png",
-                "filetype": "png",
-                "size": 1892240,
-                "created_date": "2023-10-18T19:32:00",
-                "modified_date": "2023-10-18T19:32:00",
-            },
-        ]
-        self._current_index = 0
+        self._status.setText("No scanned files found. Use Menu → Scan Folder to start.")
+
+    def _choose_and_scan_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Select folder to scan", str(Path.home()))
+        if not folder:
+            self._status.setText("Folder scan canceled.")
+            return
+        self._scan_folder(Path(folder))
+
+    def _scan_folder(self, folder: Path) -> None:
+        try:
+            scanned = scan_and_store(folder)
+            rows = list_files(limit=400)
+            self._files = [dict(row) for row in rows]
+            self._current_index = 0
+            self._render_current_file()
+            self._status.setText(f"Scan complete: {scanned} files indexed from {folder}.")
+        except Exception as exc:
+            self._status.setText(f"Folder scan failed ({exc})")
 
     def _render_current_file(self, *, action_text: str | None = None) -> None:
         if not self._files:
@@ -543,25 +542,38 @@ class MainWindow(QMainWindow):
         return self._files[self._current_index]
 
     def _on_keep(self) -> None:
-        self._handle_decision("KEEP", LABEL_KEEP, QPoint(260, 0))
+        self._handle_decision("KEEP", SwipeDecision.KEEP, QPoint(260, 0))
 
     def _on_archive(self) -> None:
-        self._handle_decision("ARCHIVE", LABEL_ARCHIVE, QPoint(0, -220))
+        self._handle_decision("ARCHIVE", SwipeDecision.ARCHIVE, QPoint(0, -220))
 
     def _on_not_needed(self) -> None:
-        self._handle_decision("NOT NEEDED", LABEL_NOT_NEEDED, QPoint(-260, 0))
+        self._handle_decision("NOT NEEDED", SwipeDecision.DELETE, QPoint(-260, 0))
 
-    def _handle_decision(self, action_name: str, label_name: str, offset: QPoint) -> None:
+    def _handle_decision(self, action_name: str, decision: SwipeDecision, offset: QPoint) -> None:
         if self._is_animating or not self._files:
             return
 
         current = self._current_file()
-        file_id = current.get("id")
-        if isinstance(file_id, int):
+        path = str(current.get("path") or "")
+        filename = str(current.get("filename") or Path(path).name or "unknown")
+        filetype = str(current.get("filetype") or Path(path).suffix.lstrip(".") or "unknown")
+        size = int(current.get("size") or 0)
+
+        if path:
             try:
-                save_label(file_id, label_name)
+                self._swipe_service.save_swipe(
+                    SwipeCreate(
+                        file_path=path,
+                        file_name=filename,
+                        file_type=filetype,
+                        file_size=max(size, 0),
+                        decision=decision,
+                        source=SwipeSource.HUMAN,
+                    )
+                )
             except Exception as exc:
-                self._status.setText(f"Label save failed ({exc})")
+                self._status.setText(f"Decision save failed ({exc})")
 
         self._pending_index = (self._current_index + 1) % len(self._files)
         self._animate_to_next(action_name, offset)
