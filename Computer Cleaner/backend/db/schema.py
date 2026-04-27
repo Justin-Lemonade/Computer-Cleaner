@@ -23,12 +23,16 @@ def init_swipe_schema(db_path: str | Path) -> None:
                 source TEXT NOT NULL CHECK(source IN ('human','AI','rule engine')),
                 user_override INTEGER NOT NULL DEFAULT 0 CHECK(user_override IN (0, 1)),
                 reviewed INTEGER NOT NULL DEFAULT 0 CHECK(reviewed IN (0, 1)),
+                reason TEXT,
                 is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
                 updated_at TEXT,
                 created_at TEXT NOT NULL
             );
             """
         )
+        existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(swipes);").fetchall()}
+        if "reason" not in existing_cols:
+            conn.execute("ALTER TABLE swipes ADD COLUMN reason TEXT;")
         conn.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_swipes_decision_timestamp

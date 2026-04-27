@@ -39,6 +39,7 @@ class SwipeService:
             "source": swipe.source.value,
             "user_override": swipe.user_override,
             "reviewed": False,
+            "reason": swipe.reason,
             "is_active": True,
             "created_at": timestamp,
         }
@@ -68,6 +69,8 @@ class SwipeService:
             updates["reviewed"] = int(update.reviewed)
         if update.user_override is not None:
             updates["user_override"] = int(update.user_override)
+        if update.reason is not None:
+            updates["reason"] = update.reason
         return self.repository.update(swipe_id=swipe_id, updates=updates)
 
     def delete_swipe(self, swipe_id: str) -> bool:

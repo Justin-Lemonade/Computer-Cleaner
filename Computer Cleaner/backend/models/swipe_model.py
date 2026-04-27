@@ -45,6 +45,7 @@ class SwipeRecord:
     user_override: bool
     is_active: bool
     reviewed: bool
+    reason: str | None
 
     @classmethod
     def from_row(cls, row: Any) -> "SwipeRecord":
@@ -64,6 +65,7 @@ class SwipeRecord:
             user_override=bool(row["user_override"]),
             is_active=bool(row["is_active"]),
             reviewed=bool(row["reviewed"]),
+            reason=row["reason"],
         )
 
 
@@ -80,6 +82,7 @@ class SwipeCreate:
     ai_suggestion: SwipeDecision | None = None
     user_override: bool = False
     timestamp: str | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +91,7 @@ class SwipeUpdate:
     ai_suggestion: SwipeDecision | None = None
     reviewed: bool | None = None
     user_override: bool | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
