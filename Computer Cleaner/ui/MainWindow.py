@@ -1,25 +1,11 @@
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import (
-    QEasingCurve,
-    QFileSystemWatcher,
-    QPoint,
-    QParallelAnimationGroup,
-    QProcess,
-    QPropertyAnimation,
-    QRect,
-    QSize,
-    Qt,
-    QTimer,
-)
+from PySide6.QtCore import QEasingCurve, QPoint, QParallelAnimationGroup, QPropertyAnimation, QRect, QSize, Qt
 from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import (
-    QApplication,
     QFrame,
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -28,7 +14,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QPushButton,
     QSizePolicy,
-    QStyle,
+    QSplitter,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -45,46 +31,42 @@ class _ModeSelector(QFrame):
     def __init__(self, on_mode_clicked, button_size: QSize) -> None:
         super().__init__()
         self._on_mode_clicked = on_mode_clicked
+        self._modes = ["Training", "Review", "Sorting"]
         self._active_mode = "Training"
         self._button_size = button_size
+        self._padding = 8
+        self._spacing = 10
         self._expanded = False
-        self._width_anim: QPropertyAnimation | None = None
-        self._mode_buttons: dict[str, QPushButton] = {}
+        self._active_animation: QParallelAnimationGroup | None = None
+        self._buttons: dict[str, QPushButton] = {}
+        self._effects: dict[str, QGraphicsOpacityEffect] = {}
+
+        width = self._button_size.width()
+        height = self._button_size.height()
+        self._stack_x = self._padding + (2 * (width + self._spacing))
+        self._collapsed_width = (2 * self._padding) + width
+        self._expanded_width = (2 * self._padding) + (3 * width) + (2 * self._spacing)
+        total_height = (2 * self._padding) + height
 
         self.setObjectName("ModeSelector")
+        self.setMinimumHeight(total_height)
+        self.setMaximumHeight(total_height)
+        self.setMinimumWidth(self._collapsed_width)
+        self.setMaximumWidth(self._collapsed_width)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-
-        self._current = QPushButton(self._active_mode)
-        self._current.setObjectName("ModeButton")
-        self._current.setFixedSize(self._button_size)
-        self._current.setEnabled(False)
-        self._current.setProperty("active", True)
-
-        self._row = QWidget()
-        row_layout = QHBoxLayout(self._row)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)
-
-        for mode_name in ("Training", "Review", "Sorting"):
-            button = QPushButton(mode_name)
+        for mode in self._modes:
+            button = QPushButton(mode, self)
             button.setObjectName("ModeButton")
             button.setFixedSize(self._button_size)
-            button.clicked.connect(lambda _checked=False, value=mode_name: self._mode_clicked(value))
-            self._mode_buttons[mode_name] = button
-            row_layout.addWidget(button)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(lambda _checked=False, value=mode: self._select_mode(value))
+            effect = QGraphicsOpacityEffect(button)
+            button.setGraphicsEffect(effect)
+            self._buttons[mode] = button
+            self._effects[mode] = effect
 
-        self._expanded_width = (self._button_size.width() * 3) + (8 * 2)
-        self._row.setMaximumWidth(0)
-        self._row.setMinimumWidth(0)
-        self._row.hide()
-        self._set_active_mode("Training")
-
-        layout.addWidget(self._current)
-        layout.addWidget(self._row)
+        self._arrange(immediate=True)
         self.setStyleSheet(
             """
             QFrame#ModeSelector {
@@ -100,13 +82,14 @@ class _ModeSelector(QFrame):
                 font-size: 12px;
                 font-weight: 600;
                 padding: 8px 12px;
+                text-align: center;
             }
             QPushButton#ModeButton:hover {
                 background: #2a2a2a;
                 border-color: #19c37d;
                 color: #ffffff;
             }
-            QPushButton#ModeButton[active="true"] {
+            QPushButton#ModeButton[selected="true"] {
                 background: #1f2c26;
                 border-color: #19c37d;
                 color: #ffffff;
@@ -115,84 +98,110 @@ class _ModeSelector(QFrame):
         )
 
     def enterEvent(self, event) -> None:
-        self._set_expanded(True)
+        self._expanded = True
+        self._arrange(immediate=False)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self._set_expanded(False)
+        self._expanded = False
+        self._arrange(immediate=False)
         super().leaveEvent(event)
 
-    def _mode_clicked(self, mode_name: str) -> None:
-        self._set_active_mode(mode_name)
-        self._on_mode_clicked(mode_name)
-
-    def _set_active_mode(self, mode_name: str) -> None:
+    def _select_mode(self, mode_name: str) -> None:
         self._active_mode = mode_name
-        self._current.setText(mode_name)
-        for name, button in self._mode_buttons.items():
-            button.setProperty("active", name == mode_name)
+        self._on_mode_clicked(mode_name)
+        self._expanded = False
+        self._arrange(immediate=False)
+
+    def _arrange(self, *, immediate: bool) -> None:
+        others = [mode for mode in self._modes if mode != self._active_mode]
+        left_positions = {
+            others[0]: self._padding,
+            others[1]: self._padding + self._button_size.width() + self._spacing,
+            self._active_mode: self._stack_x,
+        }
+
+        if immediate:
+            self.setMinimumWidth(self._collapsed_width if not self._expanded else self._expanded_width)
+            self.setMaximumWidth(self._collapsed_width if not self._expanded else self._expanded_width)
+            for mode, button in self._buttons.items():
+                x = left_positions[mode] if self._expanded else self._stack_x
+                button.move(x, self._padding)
+                opacity = 1.0 if self._expanded or mode == self._active_mode else 0.0
+                self._effects[mode].setOpacity(opacity)
+                button.setEnabled(self._expanded or mode == self._active_mode)
+                button.setProperty("selected", mode == self._active_mode)
+                button.style().unpolish(button)
+                button.style().polish(button)
+            return
+
+        group = QParallelAnimationGroup(self)
+
+        min_width_anim = QPropertyAnimation(self, b"minimumWidth", self)
+        min_width_anim.setDuration(130)
+        min_width_anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        min_width_anim.setStartValue(self.minimumWidth())
+        min_width_anim.setEndValue(self._expanded_width if self._expanded else self._collapsed_width)
+        group.addAnimation(min_width_anim)
+
+        max_width_anim = QPropertyAnimation(self, b"maximumWidth", self)
+        max_width_anim.setDuration(130)
+        max_width_anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        max_width_anim.setStartValue(self.maximumWidth())
+        max_width_anim.setEndValue(self._expanded_width if self._expanded else self._collapsed_width)
+        group.addAnimation(max_width_anim)
+
+        for mode, button in self._buttons.items():
+            target_x = left_positions[mode] if self._expanded else self._stack_x
+
+            move_anim = QPropertyAnimation(button, b"pos", self)
+            move_anim.setDuration(130)
+            move_anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+            move_anim.setStartValue(button.pos())
+            move_anim.setEndValue(QPoint(target_x, self._padding))
+            group.addAnimation(move_anim)
+
+            fade_anim = QPropertyAnimation(self._effects[mode], b"opacity", self)
+            fade_anim.setDuration(115)
+            fade_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            fade_anim.setStartValue(self._effects[mode].opacity())
+            target_opacity = 1.0 if self._expanded or mode == self._active_mode else 0.0
+            fade_anim.setEndValue(target_opacity)
+            group.addAnimation(fade_anim)
+
+            button.setEnabled(self._expanded or mode == self._active_mode)
+            button.setProperty("selected", mode == self._active_mode)
             button.style().unpolish(button)
             button.style().polish(button)
-        self._current.style().unpolish(self._current)
-        self._current.style().polish(self._current)
 
-    def _set_expanded(self, expanded: bool) -> None:
-        if self._expanded == expanded:
-            return
-        self._expanded = expanded
-
-        if expanded:
-            self._current.hide()
-            self._row.show()
-
-        self._width_anim = QPropertyAnimation(self._row, b"maximumWidth", self)
-        self._width_anim.setDuration(160)
-        self._width_anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
-        self._width_anim.setStartValue(self._row.maximumWidth())
-        self._width_anim.setEndValue(self._expanded_width if expanded else 0)
-        self._width_anim.finished.connect(self._on_width_anim_finished)
-        self._width_anim.start()
-
-    def _on_width_anim_finished(self) -> None:
-        if not self._expanded:
-            self._row.hide()
-            self._current.show()
+        self._active_animation = group
+        group.start()
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("File Sorter AI")
-        self.resize(1360, 900)
+        self.resize(1320, 860)
 
         self._files: list[dict[str, Any]] = []
         self._current_index = 0
         self._pending_index = 0
         self._is_animating = False
         self._active_animation: QParallelAnimationGroup | None = None
-        self._run_mode_enabled = os.environ.get("FILE_SORTER_RUN_MODE") == "1"
-        self._restart_pending = False
-        self._watcher: QFileSystemWatcher | None = None
 
         root = QWidget()
         root_layout = QVBoxLayout(root)
         root_layout.setContentsMargins(20, 16, 20, 16)
         root_layout.setSpacing(12)
-
         root_layout.addWidget(self._build_top_bar())
 
-        body = QWidget()
-        body_layout = QHBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(14)
-
         self._info_panel = InfoPanel()
-        body_layout.addWidget(self._info_panel, 0)
 
         self._preview_stage = QFrame()
         self._preview_stage.setObjectName("PreviewStage")
+        self._preview_stage.setMinimumWidth(420)
         self._preview_stage.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self._preview_stage.setMinimumWidth(900)
 
         self._preview_card = FileCard()
         self._preview_card.setParent(self._preview_stage)
@@ -200,8 +209,16 @@ class MainWindow(QMainWindow):
         self._preview_card.setGraphicsEffect(self._preview_effect)
         self._preview_effect.setOpacity(1.0)
 
-        body_layout.addWidget(self._preview_stage, 1)
-        root_layout.addWidget(body, 1)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(1)
+        splitter.setObjectName("MainSplitter")
+        splitter.addWidget(self._info_panel)
+        splitter.addWidget(self._preview_stage)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([320, 980])
+        root_layout.addWidget(splitter, 1)
 
         self._status = QLabel("Training mode active. Classify each file with one action.")
         self._status.setObjectName("StatusText")
@@ -225,7 +242,6 @@ class MainWindow(QMainWindow):
         self._install_shortcuts()
         self._load_files()
         self._render_current_file()
-        self._start_auto_reload_if_enabled()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -254,35 +270,25 @@ class MainWindow(QMainWindow):
         title_layout.addWidget(title)
         title_layout.addWidget(self._subtitle)
 
-        controls = QWidget()
-        controls_layout = QHBoxLayout(controls)
-        controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setSpacing(8)
-
-        self._run_button = QPushButton("RUN")
-        self._run_button.setObjectName("RunButton")
-        self._run_button.setFixedSize(96, 40)
-        self._run_button.clicked.connect(self._run_clicked)
-
         menu_button = QToolButton()
         menu_button.setObjectName("MenuButton")
         menu_button.setText("Menu")
         menu_button.setFixedSize(96, 40)
         menu_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         menu_button.setMenu(self._build_menu())
 
-        controls_layout.addWidget(self._run_button)
-        controls_layout.addWidget(menu_button)
-
         layout.addWidget(title_wrap, 1)
-        layout.addWidget(controls, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(menu_button, 0, Qt.AlignmentFlag.AlignTop)
         return top
 
     def _build_menu(self) -> QMenu:
         menu = QMenu(self)
         for action_name in ("Settings", "History", "Search"):
             action = QAction(action_name, self)
-            action.triggered.connect(lambda _checked=False, value=action_name: self._status.setText(f"{value} coming soon."))
+            action.triggered.connect(
+                lambda _checked=False, value=action_name: self._status.setText(f"{value} coming soon.")
+            )
             menu.addAction(action)
         return menu
 
@@ -294,19 +300,17 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         specs = [
-            ("KEEP", "primary", self._on_keep, QStyle.StandardPixmap.SP_DialogApplyButton),
-            ("ARCHIVE", "secondary", self._on_archive, QStyle.StandardPixmap.SP_DriveHDIcon),
-            ("NOT NEEDED", "danger", self._on_not_needed, QStyle.StandardPixmap.SP_TrashIcon),
-            ("MORE INFO", "secondary", self._toggle_details, QStyle.StandardPixmap.SP_FileDialogDetailedView),
-            ("OPEN FILE", "secondary", self._open_file, QStyle.StandardPixmap.SP_DirOpenIcon),
+            ("KEEP", "primary", self._on_keep),
+            ("ARCHIVE", "secondary", self._on_archive),
+            ("NOT NEEDED", "danger", self._on_not_needed),
+            ("MORE INFO", "secondary", self._toggle_details),
+            ("OPEN FILE", "secondary", self._open_file),
         ]
-        for text, role, callback, icon_id in specs:
+        for text, role, callback in specs:
             button = QPushButton(text)
             button.setObjectName("ActionButton")
             button.setProperty("role", role)
             button.setFixedSize(138, 46)
-            button.setIcon(self.style().standardIcon(icon_id))
-            button.setIconSize(QSize(20, 20))
             button.clicked.connect(callback)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             layout.addWidget(button)
@@ -314,9 +318,6 @@ class MainWindow(QMainWindow):
         return dock
 
     def _apply_dark_theme(self) -> None:
-        if self._run_mode_enabled:
-            self._run_button.setText("RUNNING")
-
         self.setStyleSheet(
             """
             QMainWindow {
@@ -326,6 +327,9 @@ class MainWindow(QMainWindow):
                 background: #171717;
                 border: 1px solid #2f2f2f;
                 border-radius: 16px;
+            }
+            QSplitter#MainSplitter::handle {
+                background: #2f2f2f;
             }
             QLabel#PageTitle {
                 color: #ffffff;
@@ -350,8 +354,8 @@ class MainWindow(QMainWindow):
                 color: #ffffff;
                 font-size: 12px;
                 font-weight: 600;
-                text-align: left;
-                padding: 8px 12px;
+                text-align: center;
+                padding: 8px 10px;
             }
             QPushButton#ActionButton:hover {
                 background: #2a2a2a;
@@ -360,27 +364,14 @@ class MainWindow(QMainWindow):
             QPushButton#ActionButton[role="primary"] {
                 background: #1f2c26;
                 border-color: #19c37d;
-                color: #ffffff;
             }
             QPushButton#ActionButton[role="danger"] {
                 background: #322126;
                 border-color: #5b2e36;
-                color: #ffffff;
             }
             QPushButton#ActionButton[role="danger"]:hover {
                 background: #3a242a;
                 border-color: #6a3640;
-            }
-            QPushButton#RunButton {
-                border: 1px solid #19c37d;
-                border-radius: 10px;
-                background: #1f2c26;
-                color: #ffffff;
-                font-size: 12px;
-                font-weight: 700;
-            }
-            QPushButton#RunButton:hover {
-                background: #27392f;
             }
             QToolButton#MenuButton {
                 border: 1px solid #2f2f2f;
@@ -389,10 +380,15 @@ class MainWindow(QMainWindow):
                 color: #ffffff;
                 font-size: 12px;
                 font-weight: 600;
+                padding: 8px 14px;
             }
             QToolButton#MenuButton:hover {
                 background: #2a2a2a;
                 border-color: #19c37d;
+            }
+            QToolButton#MenuButton::menu-indicator {
+                image: none;
+                width: 0px;
             }
             QMenu {
                 background: #171717;
@@ -418,7 +414,9 @@ class MainWindow(QMainWindow):
         add_shortcut(self, "D", self._on_keep)
         add_shortcut(self, "Up", self._on_archive)
         add_shortcut(self, "W", self._on_archive)
-        add_shortcut(self, "Space", self._toggle_details)
+        add_shortcut(self, "Down", self._toggle_details)
+        add_shortcut(self, "S", self._toggle_details)
+        add_shortcut(self, "Space", self._open_file)
 
     def _load_files(self) -> None:
         try:
@@ -478,10 +476,8 @@ class MainWindow(QMainWindow):
 
     def _preview_rect(self) -> QRect:
         rect = self._preview_stage.contentsRect()
-        width = max(760, rect.width() - 44)
-        height = max(500, rect.height() - 44)
-        width = min(1040, width)
-        height = min(660, height)
+        width = min(max(rect.width() - 36, 520), 1100)
+        height = min(max(rect.height() - 36, 340), 680)
         x = rect.x() + (rect.width() - width) // 2
         y = rect.y() + (rect.height() - height) // 2
         return QRect(x, y, width, height)
@@ -490,13 +486,13 @@ class MainWindow(QMainWindow):
         return self._files[self._current_index]
 
     def _on_keep(self) -> None:
-        self._handle_decision("KEEP", LABEL_KEEP, QPoint(220, 0))
+        self._handle_decision("KEEP", LABEL_KEEP, QPoint(260, 0))
 
     def _on_archive(self) -> None:
-        self._handle_decision("ARCHIVE", LABEL_ARCHIVE, QPoint(0, -170))
+        self._handle_decision("ARCHIVE", LABEL_ARCHIVE, QPoint(0, -220))
 
     def _on_not_needed(self) -> None:
-        self._handle_decision("NOT NEEDED", LABEL_NOT_NEEDED, QPoint(-220, 0))
+        self._handle_decision("NOT NEEDED", LABEL_NOT_NEEDED, QPoint(-260, 0))
 
     def _handle_decision(self, action_name: str, label_name: str, offset: QPoint) -> None:
         if self._is_animating or not self._files:
@@ -516,19 +512,35 @@ class MainWindow(QMainWindow):
     def _animate_to_next(self, action_name: str, offset: QPoint) -> None:
         self._is_animating = True
         start = self._preview_card.geometry()
-        end = QRect(start.x() + offset.x(), start.y() + offset.y(), start.width(), start.height())
+        weight_drop = 14 if offset.x != 0 else 8
+        if offset.y < 0:
+            mid = QRect(start.x(), start.y() + 12, start.width(), start.height())
+        else:
+            mid = QRect(
+                start.x() + int(offset.x() * 0.30),
+                start.y() + int(offset.y() * 0.25) + weight_drop,
+                start.width(),
+                start.height(),
+            )
+        end = QRect(
+            start.x() + int(offset.x() * 1.15),
+            start.y() + int(offset.y() * 1.08),
+            int(start.width() * 0.96),
+            int(start.height() * 0.96),
+        )
 
         slide_out = QPropertyAnimation(self._preview_card, b"geometry", self)
-        slide_out.setDuration(170)
+        slide_out.setDuration(210)
+        slide_out.setEasingCurve(QEasingCurve.Type.InCubic)
         slide_out.setStartValue(start)
+        slide_out.setKeyValueAt(0.35, mid)
         slide_out.setEndValue(end)
-        slide_out.setEasingCurve(QEasingCurve.Type.InOutCubic)
 
         fade_out = QPropertyAnimation(self._preview_effect, b"opacity", self)
         fade_out.setDuration(170)
+        fade_out.setEasingCurve(QEasingCurve.Type.InQuad)
         fade_out.setStartValue(1.0)
         fade_out.setEndValue(0.0)
-        fade_out.setEasingCurve(QEasingCurve.Type.InOutQuad)
 
         out_group = QParallelAnimationGroup(self)
         out_group.addAnimation(slide_out)
@@ -543,25 +555,33 @@ class MainWindow(QMainWindow):
 
         target = self._preview_rect()
         incoming = QRect(
-            target.x() - int(offset.x() * 0.28),
-            target.y() - int(offset.y() * 0.28),
+            target.x() - int(offset.x() * 0.48),
+            target.y() - int(offset.y() * 0.40) + 10,
             target.width(),
             target.height(),
         )
+        overshoot = QRect(
+            target.x() + int(offset.x() * 0.07),
+            target.y() + int(offset.y() * 0.05),
+            target.width(),
+            target.height(),
+        )
+
         self._preview_card.setGeometry(incoming)
         self._preview_effect.setOpacity(0.0)
 
         slide_in = QPropertyAnimation(self._preview_card, b"geometry", self)
-        slide_in.setDuration(180)
+        slide_in.setDuration(220)
+        slide_in.setEasingCurve(QEasingCurve.Type.OutCubic)
         slide_in.setStartValue(incoming)
+        slide_in.setKeyValueAt(0.80, overshoot)
         slide_in.setEndValue(target)
-        slide_in.setEasingCurve(QEasingCurve.Type.InOutCubic)
 
         fade_in = QPropertyAnimation(self._preview_effect, b"opacity", self)
         fade_in.setDuration(180)
+        fade_in.setEasingCurve(QEasingCurve.Type.OutQuad)
         fade_in.setStartValue(0.0)
         fade_in.setEndValue(1.0)
-        fade_in.setEasingCurve(QEasingCurve.Type.InOutQuad)
 
         in_group = QParallelAnimationGroup(self)
         in_group.addAnimation(slide_in)
@@ -598,61 +618,3 @@ class MainWindow(QMainWindow):
             self._status.setText(f"{mode_name} mode layout is staged and not yet active.")
             return
         self._status.setText("Training mode active.")
-
-    def _run_clicked(self) -> None:
-        self._run_mode_enabled = True
-        os.environ["FILE_SORTER_RUN_MODE"] = "1"
-        self._run_button.setText("RUNNING")
-        self._status.setText("RUN enabled. Relaunching UI and watching source files.")
-        self._start_auto_reload_if_enabled()
-        QTimer.singleShot(120, self._restart_application)
-
-    def _start_auto_reload_if_enabled(self) -> None:
-        if not self._run_mode_enabled:
-            return
-        if self._watcher is not None:
-            return
-
-        project_root = Path(__file__).resolve().parents[1]
-        ui_dir = project_root / "ui"
-        watch_paths = [
-            project_root / "App.py",
-            project_root / "Config.py",
-            ui_dir / "MainWindow.py",
-            ui_dir / "FileCard.py",
-            ui_dir / "InfoPanel.py",
-            ui_dir / "KeyboardShortcuts.py",
-        ]
-
-        self._watcher = QFileSystemWatcher(self)
-        existing = [str(path) for path in watch_paths if path.exists()]
-        if existing:
-            self._watcher.addPaths(existing)
-        self._watcher.fileChanged.connect(self._source_changed)
-
-    def _source_changed(self, path: str) -> None:
-        if self._watcher is not None and path and os.path.exists(path) and path not in self._watcher.files():
-            self._watcher.addPath(path)
-
-        if not self._run_mode_enabled or self._restart_pending:
-            return
-        self._restart_pending = True
-        self._status.setText("Source change detected. Relaunching updated UI.")
-        QTimer.singleShot(200, self._restart_application)
-
-    def _restart_application(self) -> None:
-        project_root = Path(__file__).resolve().parents[1]
-        app_entry = project_root / "App.py"
-        executable = sys.executable
-
-        if not executable or not Path(executable).exists():
-            self._status.setText("Cannot relaunch: Python executable not found.")
-            self._restart_pending = False
-            return
-
-        launched = QProcess.startDetached(executable, [str(app_entry)], str(project_root))
-        if not launched:
-            self._status.setText("Relaunch failed.")
-            self._restart_pending = False
-            return
-        QApplication.instance().quit()

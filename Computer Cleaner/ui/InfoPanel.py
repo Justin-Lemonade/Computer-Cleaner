@@ -33,7 +33,7 @@ class InfoPanel(QFrame):
         self._detail.setWordWrap(True)
         self._detail.hide()
 
-        self._shortcuts = QLabel("Shortcuts: A/Left=Not Needed  D/Right=Keep  W/Up=Archive")
+        self._shortcuts = QLabel("Shortcuts: A/Left=Not Needed  D/Right=Keep  W/Up=Archive  S/Down=More Info  Space=Open File")
         self._shortcuts.setObjectName("InfoShortcuts")
         self._shortcuts.setWordWrap(True)
 

@@ -5,7 +5,7 @@ Desktop app for scanning, previewing, and labeling files so you can sort them th
 ## Setup (Windows)
 
 ```powershell
-cd "Computer Cleaner"
+cd "C:\Users\I'm not a hacker\OneDrive\Documents\New project"
 .\scripts\Setup.ps1
 ```
 

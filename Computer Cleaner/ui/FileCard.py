@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QLabel, QStyle, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 
 class FileCard(QFrame):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("PreviewCard")
-        self.setMinimumSize(760, 500)
+        self.setMinimumSize(520, 340)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(26, 24, 26, 24)
@@ -26,10 +26,6 @@ class FileCard(QFrame):
         surface_layout.setSpacing(14)
         surface_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._icon = QLabel()
-        self._icon.setObjectName("PreviewIcon")
-        self._icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
         self._title = QLabel("No file selected")
         self._title.setObjectName("PreviewTitle")
         self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -40,7 +36,6 @@ class FileCard(QFrame):
         self._hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hint.setWordWrap(True)
 
-        surface_layout.addWidget(self._icon)
         surface_layout.addWidget(self._title)
         surface_layout.addWidget(self._hint)
 
@@ -65,12 +60,9 @@ class FileCard(QFrame):
                 border: 1px solid #2f2f2f;
                 border-radius: 14px;
             }
-            QLabel#PreviewIcon {
-                color: #ffffff;
-            }
             QLabel#PreviewTitle {
                 color: #ffffff;
-                font-size: 22px;
+                font-size: 20px;
                 font-weight: 600;
             }
             QLabel#PreviewHint {
@@ -82,18 +74,4 @@ class FileCard(QFrame):
 
     def set_file(self, file_data: Mapping[str, Any]) -> None:
         filename = str(file_data.get("filename") or "Unnamed file")
-        filetype = str(file_data.get("filetype") or "").lower()
         self._title.setText(filename)
-        self._icon.setPixmap(self._icon_for_type(filetype))
-
-    def _icon_for_type(self, filetype: str):
-        style = self.style()
-        if filetype in {"png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff"}:
-            icon = style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView)
-        elif filetype == "pdf":
-            icon = style.standardIcon(QStyle.StandardPixmap.SP_FileIcon)
-        elif filetype in {"doc", "docx"}:
-            icon = style.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)
-        else:
-            icon = style.standardIcon(QStyle.StandardPixmap.SP_FileIcon)
-        return icon.pixmap(136, 136)
