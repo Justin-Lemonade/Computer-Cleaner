@@ -12,3 +12,6 @@ python-magic; platform_system != "Windows"
 tqdm
 PySide6
 
+
+fastapi
+pydantic
