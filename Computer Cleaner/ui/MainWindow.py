@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import os
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QEasingCurve, QPoint, QParallelAnimationGroup, QPropertyAnimation, QRect, QSize, Qt
 from PySide6.QtGui import QAction, QColor, QFont
 from PySide6.QtWidgets import (
-    QButtonGroup,
     QFrame,
     QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
@@ -23,6 +24,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from Config import CONFIG
+from backend.models.swipe_model import SwipeCreate, SwipeDecision, SwipeSource
+from backend.services.swipe_service import SwipeService
 from database.Db import list_files
 from logic.LabelHandler import LABEL_ARCHIVE, LABEL_KEEP, LABEL_NOT_NEEDED, save_label
 from ui.FileCard import FileCard
@@ -244,6 +248,7 @@ class MainWindow(QMainWindow):
         self._is_animating = False
         self._active_animation: QParallelAnimationGroup | None = None
         self._pending_decision: dict[str, Any] | None = None
+        self._swipe_service = SwipeService(CONFIG.db_path)
 
         root = QWidget()
         root_layout = QVBoxLayout(root)
@@ -397,8 +402,6 @@ class MainWindow(QMainWindow):
         self._reason_hint.setObjectName("ReasonHint")
         layout.addWidget(self._reason_hint)
 
-        self._reason_button_group = QButtonGroup(self)
-        self._reason_button_group.setExclusive(False)
         self._reason_buttons_wrap = QWidget()
         self._reason_buttons_layout = QVBoxLayout(self._reason_buttons_wrap)
         self._reason_buttons_layout.setContentsMargins(0, 0, 0, 0)
@@ -419,6 +422,45 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._custom_submit_button)
         layout.addStretch(1)
         return panel
+
+    def _build_empty_state(self) -> QFrame:
+        state = QFrame()
+        state.setObjectName("EmptyQueueState")
+
+        layout = QVBoxLayout(state)
+        layout.setContentsMargins(36, 36, 36, 36)
+        layout.setSpacing(16)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        title = QLabel("No files in your queue yet")
+        title.setObjectName("EmptyQueueTitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        hint = QLabel("Pick a folder to scan and generate previews before you start swiping.")
+        hint.setObjectName("EmptyQueueHint")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hint.setWordWrap(True)
+
+        actions = QWidget()
+        actions_layout = QHBoxLayout(actions)
+        actions_layout.setContentsMargins(0, 4, 0, 0)
+        actions_layout.setSpacing(12)
+
+        random_button = _ActionButton("Choose Random Folder", "neutral")
+        random_button.setObjectName("EmptyStateActionButton")
+        random_button.clicked.connect(self._choose_random_folder)
+
+        select_button = _ActionButton("Select", "save")
+        select_button.setObjectName("EmptyStateActionButton")
+        select_button.clicked.connect(self._select_folder)
+
+        actions_layout.addWidget(random_button)
+        actions_layout.addWidget(select_button)
+
+        layout.addWidget(title)
+        layout.addWidget(hint)
+        layout.addWidget(actions, 0, Qt.AlignmentFlag.AlignCenter)
+        return state
 
     def _apply_dark_theme(self) -> None:
         self.setStyleSheet(
@@ -449,6 +491,20 @@ class MainWindow(QMainWindow):
                 background: transparent;
                 border: none;
                 border-radius: 0px;
+            }
+            QFrame#EmptyQueueState {
+                background: #171717;
+                border: 1px solid #2f2f2f;
+                border-radius: 16px;
+            }
+            QLabel#EmptyQueueTitle {
+                color: #ffffff;
+                font-size: 24px;
+                font-weight: 700;
+            }
+            QLabel#EmptyQueueHint {
+                color: #b3b3b3;
+                font-size: 13px;
             }
             QFrame#ReasonPanel {
                 background: #171717;
@@ -641,21 +697,22 @@ class MainWindow(QMainWindow):
         return self._files[self._current_index]
 
     def _on_keep(self) -> None:
-        self._handle_decision("KEEP", LABEL_KEEP, QPoint(260, 0))
+        self._handle_decision("KEEP", LABEL_KEEP, SwipeDecision.KEEP, QPoint(260, 0))
 
     def _on_archive(self) -> None:
-        self._handle_decision("ARCHIVE", LABEL_ARCHIVE, QPoint(0, -220))
+        self._handle_decision("ARCHIVE", LABEL_ARCHIVE, SwipeDecision.ARCHIVE, QPoint(0, -220))
 
     def _on_not_needed(self) -> None:
-        self._handle_decision("NOT NEEDED", LABEL_NOT_NEEDED, QPoint(-260, 0))
+        self._handle_decision("NOT NEEDED", LABEL_NOT_NEEDED, SwipeDecision.DELETE, QPoint(-260, 0))
 
-    def _handle_decision(self, action_name: str, label_name: str, offset: QPoint) -> None:
+    def _handle_decision(self, action_name: str, label_name: str, decision: SwipeDecision, offset: QPoint) -> None:
         if self._is_animating or not self._files or self._pending_decision is not None:
             return
 
         self._pending_decision = {
             "action_name": action_name,
             "label_name": label_name,
+            "decision": decision,
             "offset": offset,
         }
         self._show_reason_panel(action_name, label_name)
@@ -705,6 +762,7 @@ class MainWindow(QMainWindow):
         current = self._current_file()
         file_id = current.get("id")
         label_name = self._pending_decision["label_name"]
+        decision = self._pending_decision["decision"]
         action_name = self._pending_decision["action_name"]
         offset = self._pending_decision["offset"]
         if isinstance(file_id, int):
@@ -712,6 +770,28 @@ class MainWindow(QMainWindow):
                 save_label(file_id, label_name, notes=reason)
             except Exception as exc:
                 self._status.setText(f"Label save failed ({exc})")
+
+        path = str(current.get("path") or "")
+        filename = str(current.get("filename") or Path(path).name or "unknown")
+        filetype = str(current.get("filetype") or Path(path).suffix.lstrip(".") or "unknown")
+        size = int(current.get("size") or 0)
+        if path:
+            try:
+                hash_value = self._compute_file_hash(path)
+                self._swipe_service.save_swipe(
+                    SwipeCreate(
+                        file_path=path,
+                        file_name=filename,
+                        file_type=filetype,
+                        file_size=max(size, 0),
+                        file_hash=hash_value,
+                        decision=decision,
+                        source=SwipeSource.HUMAN,
+                        reason=reason,
+                    )
+                )
+            except Exception as exc:
+                self._status.setText(f"Decision save failed ({exc})")
 
         self._pending_decision = None
         self._reason_panel.setVisible(False)
@@ -827,3 +907,18 @@ class MainWindow(QMainWindow):
             self._status.setText(f"{mode_name} mode layout is staged and not yet active.")
             return
         self._status.setText("Training mode active.")
+
+    def _compute_file_hash(self, path: str) -> str | None:
+        if not os.path.exists(path):
+            return None
+        hasher = hashlib.sha256()
+        with open(path, "rb") as file_handle:
+            for chunk in iter(lambda: file_handle.read(1024 * 1024), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
+    def _choose_random_folder(self) -> None:
+        self._status.setText("Random folder picker is not wired yet.")
+
+    def _select_folder(self) -> None:
+        self._status.setText("Folder picker is not wired yet.")
