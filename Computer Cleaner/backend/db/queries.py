@@ -19,8 +19,8 @@ class SwipeRepository:
                 INSERT INTO swipes (
                     id, file_path, file_name, file_type, file_size, folder_path,
                     decision, timestamp, file_hash, ai_suggestion, source,
-                    user_override, reviewed, is_active, updated_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    user_override, reviewed, reason, is_active, updated_at, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     payload["id"],
@@ -36,6 +36,7 @@ class SwipeRepository:
                     payload["source"],
                     int(payload.get("user_override", False)),
                     int(payload.get("reviewed", False)),
+                    payload.get("reason"),
                     int(payload.get("is_active", True)),
                     payload.get("updated_at"),
                     payload.get("created_at", utc_now_iso()),

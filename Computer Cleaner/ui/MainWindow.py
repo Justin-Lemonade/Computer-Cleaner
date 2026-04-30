@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import os
 from hashlib import sha256
 import os
 from hashlib import sha256
@@ -14,6 +16,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMenu,
     QPushButton,
@@ -260,6 +263,12 @@ class _ModeSelector(QFrame):
 
 
 class MainWindow(QMainWindow):
+    _REASON_PRESETS = {
+        LABEL_KEEP: ["Used recently", "Important", "Needed for work", "Reference material"],
+        LABEL_ARCHIVE: ["Sentimental value", "Important", "Need later", "Store without clutter"],
+        LABEL_NOT_NEEDED: ["Not using", "Too big", "Duplicate", "Outdated"],
+    }
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("File Sorter AI")
@@ -270,6 +279,7 @@ class MainWindow(QMainWindow):
         self._pending_index = 0
         self._is_animating = False
         self._active_animation: QParallelAnimationGroup | None = None
+        self._pending_decision: dict[str, Any] | None = None
         self._swipe_service = SwipeService(CONFIG.db_path)
 
         root = QWidget()
@@ -299,10 +309,14 @@ class MainWindow(QMainWindow):
         splitter.setObjectName("MainSplitter")
         splitter.addWidget(self._info_panel)
         splitter.addWidget(self._preview_stage)
+        self._reason_panel = self._build_reason_panel()
+        splitter.addWidget(self._reason_panel)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([320, 980])
+        splitter.setStretchFactor(2, 0)
+        splitter.setSizes([320, 980, 0])
         root_layout.addWidget(splitter, 1)
+        self._main_splitter = splitter
 
         self._status = QLabel("Training mode active. Classify each file with one action.")
         self._status.setObjectName("StatusText")
@@ -406,6 +420,48 @@ class MainWindow(QMainWindow):
 
         return dock
 
+    def _build_reason_panel(self) -> QWidget:
+        panel = QFrame()
+        panel.setObjectName("ReasonPanel")
+        panel.setMinimumWidth(0)
+        panel.setMaximumWidth(320)
+        panel.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        panel.setVisible(False)
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        title = QLabel("Reason")
+        title.setObjectName("ReasonTitle")
+        layout.addWidget(title)
+
+        self._reason_hint = QLabel("Choose why this decision was made.")
+        self._reason_hint.setWordWrap(True)
+        self._reason_hint.setObjectName("ReasonHint")
+        layout.addWidget(self._reason_hint)
+
+        self._reason_buttons_wrap = QWidget()
+        self._reason_buttons_layout = QVBoxLayout(self._reason_buttons_wrap)
+        self._reason_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        self._reason_buttons_layout.setSpacing(8)
+        layout.addWidget(self._reason_buttons_wrap)
+
+        self._custom_reason_input = QLineEdit()
+        self._custom_reason_input.setObjectName("ReasonInput")
+        self._custom_reason_input.setPlaceholderText("Enter custom reason")
+        self._custom_reason_input.setVisible(False)
+        self._custom_reason_input.returnPressed.connect(self._submit_custom_reason)
+        layout.addWidget(self._custom_reason_input)
+
+        self._custom_submit_button = QPushButton("Save custom reason")
+        self._custom_submit_button.setObjectName("ReasonCustomSubmit")
+        self._custom_submit_button.clicked.connect(self._submit_custom_reason)
+        self._custom_submit_button.setVisible(False)
+        layout.addWidget(self._custom_submit_button)
+        layout.addStretch(1)
+        return panel
+
     def _build_empty_state(self) -> QFrame:
         state = QFrame()
         state.setObjectName("EmptyQueueState")
@@ -488,6 +544,49 @@ class MainWindow(QMainWindow):
             QLabel#EmptyQueueHint {
                 color: #b3b3b3;
                 font-size: 13px;
+            }
+            QFrame#ReasonPanel {
+                background: #171717;
+                border: 1px solid #2f2f2f;
+                border-radius: 14px;
+            }
+            QLabel#ReasonTitle {
+                color: #ffffff;
+                font-size: 16px;
+                font-weight: 700;
+            }
+            QLabel#ReasonHint {
+                color: #b3b3b3;
+                font-size: 12px;
+            }
+            QPushButton#ReasonChoice {
+                border: 1px solid #3b3b3b;
+                border-radius: 8px;
+                background: #0e0e0e;
+                color: #ffffff;
+                font-size: 12px;
+                font-weight: 600;
+                text-align: left;
+                padding: 8px 10px;
+            }
+            QPushButton#ReasonChoice:hover {
+                border-color: #19c37d;
+                color: #19c37d;
+            }
+            QLineEdit#ReasonInput {
+                border: 1px solid #3b3b3b;
+                border-radius: 8px;
+                background: #0e0e0e;
+                color: #ffffff;
+                padding: 7px 10px;
+            }
+            QPushButton#ReasonCustomSubmit {
+                border: 1px solid #2f2f2f;
+                border-radius: 8px;
+                background: #121212;
+                color: #ffffff;
+                font-size: 12px;
+                padding: 8px 10px;
             }
             QPushButton#ActionButton {
                 border: 1px solid #3b3b3b;
@@ -707,6 +806,16 @@ class MainWindow(QMainWindow):
             self._status.setText(f"Folder processing failed ({exc})")
 
     def _on_keep(self) -> None:
+        self._handle_decision("KEEP", LABEL_KEEP, SwipeDecision.KEEP, QPoint(260, 0))
+
+    def _on_archive(self) -> None:
+        self._handle_decision("ARCHIVE", LABEL_ARCHIVE, SwipeDecision.ARCHIVE, QPoint(0, -220))
+
+    def _on_not_needed(self) -> None:
+        self._handle_decision("NOT NEEDED", LABEL_NOT_NEEDED, SwipeDecision.DELETE, QPoint(-260, 0))
+
+    def _handle_decision(self, action_name: str, label_name: str, decision: SwipeDecision, offset: QPoint) -> None:
+        if self._is_animating or not self._files or self._pending_decision is not None:
         self._handle_decision("KEEP", SwipeDecision.KEEP, QPoint(260, 0))
 
     def _on_archive(self) -> None:
@@ -719,7 +828,65 @@ class MainWindow(QMainWindow):
         if self._is_animating or not self._files:
             return
 
+        self._pending_decision = {
+            "action_name": action_name,
+            "label_name": label_name,
+            "decision": decision,
+            "offset": offset,
+        }
+        self._show_reason_panel(action_name, label_name)
+
+    def _show_reason_panel(self, action_name: str, label_name: str) -> None:
+        self._reason_panel.setVisible(True)
+        self._reason_hint.setText(f"Decision: {action_name}. Select a reason for this swipe.")
+        self._custom_reason_input.clear()
+        self._custom_reason_input.setVisible(False)
+        self._custom_submit_button.setVisible(False)
+
+        while self._reason_buttons_layout.count():
+            item = self._reason_buttons_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        options = self._REASON_PRESETS.get(label_name, [])
+        for option in options:
+            button = QPushButton(option)
+            button.setObjectName("ReasonChoice")
+            button.clicked.connect(lambda _checked=False, reason=option: self._submit_reason(reason))
+            self._reason_buttons_layout.addWidget(button)
+
+        custom_button = QPushButton("Different option")
+        custom_button.setObjectName("ReasonChoice")
+        custom_button.clicked.connect(self._open_custom_reason_input)
+        self._reason_buttons_layout.addWidget(custom_button)
+        self._main_splitter.setSizes([300, 760, 260])
+        self._status.setText(f"{action_name} selected. Add a reason to continue.")
+
+    def _open_custom_reason_input(self) -> None:
+        self._custom_reason_input.setVisible(True)
+        self._custom_submit_button.setVisible(True)
+        self._custom_reason_input.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _submit_custom_reason(self) -> None:
+        reason = self._custom_reason_input.text().strip()
+        if not reason:
+            self._status.setText("Custom reason cannot be empty.")
+            return
+        self._submit_reason(reason)
+
+    def _submit_reason(self, reason: str) -> None:
+        if not self._pending_decision:
+            return
         current = self._current_file()
+        file_id = current.get("id")
+        label_name = self._pending_decision["label_name"]
+        decision = self._pending_decision["decision"]
+        action_name = self._pending_decision["action_name"]
+        offset = self._pending_decision["offset"]
+        if isinstance(file_id, int):
+            try:
+                save_label(file_id, label_name, notes=reason)
         path = str(current.get("path") or "")
         filename = str(current.get("filename") or Path(path).name or "unknown")
         filetype = str(current.get("filetype") or Path(path).suffix.lstrip(".") or "unknown")
@@ -742,8 +909,32 @@ class MainWindow(QMainWindow):
             except Exception as exc:
                 self._status.setText(f"Decision save failed ({exc})")
 
+        path = str(current.get("path") or "")
+        filename = str(current.get("filename") or Path(path).name or "unknown")
+        filetype = str(current.get("filetype") or Path(path).suffix.lstrip(".") or "unknown")
+        size = int(current.get("size") or 0)
+        if path:
+            try:
+                hash_value = self._compute_file_hash(path)
+                self._swipe_service.save_swipe(
+                    SwipeCreate(
+                        file_path=path,
+                        file_name=filename,
+                        file_type=filetype,
+                        file_size=max(size, 0),
+                        file_hash=hash_value,
+                        decision=decision,
+                        source=SwipeSource.HUMAN,
+                        reason=reason,
+                    )
+                )
+            except Exception as exc:
+                self._status.setText(f"Decision save failed ({exc})")
+
+        self._pending_decision = None
+        self._reason_panel.setVisible(False)
         self._pending_index = (self._current_index + 1) % len(self._files)
-        self._animate_to_next(action_name, offset)
+        self._animate_to_next(f"{action_name} ({reason})", offset)
 
     def _animate_to_next(self, action_name: str, offset: QPoint) -> None:
         self._is_animating = True
@@ -858,6 +1049,20 @@ class MainWindow(QMainWindow):
             return
         self._status.setText("Training mode active.")
 
+    def _compute_file_hash(self, path: str) -> str | None:
+        if not os.path.exists(path):
+            return None
+        hasher = hashlib.sha256()
+        with open(path, "rb") as file_handle:
+            for chunk in iter(lambda: file_handle.read(1024 * 1024), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
+    def _choose_random_folder(self) -> None:
+        self._status.setText("Random folder picker is not wired yet.")
+
+    def _select_folder(self) -> None:
+        self._status.setText("Folder picker is not wired yet.")
     def _compute_file_hash(self, raw_path: str) -> str | None:
         file_path = Path(raw_path)
         if not file_path.exists() or not file_path.is_file():

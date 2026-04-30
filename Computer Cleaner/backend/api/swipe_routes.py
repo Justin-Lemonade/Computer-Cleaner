@@ -31,6 +31,7 @@ class SwipeCreateRequest(BaseModel):
     ai_suggestion: SwipeDecision | None = None
     user_override: bool = False
     timestamp: str | None = None
+    reason: str | None = None
 
 
 class SwipeUpdateRequest(BaseModel):
@@ -38,6 +39,7 @@ class SwipeUpdateRequest(BaseModel):
     ai_suggestion: SwipeDecision | None = None
     reviewed: bool | None = None
     user_override: bool | None = None
+    reason: str | None = None
 
 
 class SwipeResponse(BaseModel):
@@ -55,6 +57,7 @@ class SwipeResponse(BaseModel):
     user_override: bool
     is_active: bool
     reviewed: bool
+    reason: str | None
 
 
 class SwipeListResponse(BaseModel):
