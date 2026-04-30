@@ -4,10 +4,28 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Resolve-FirstExistingPath {
+  param(
+    [string[]]$Candidates,
+    [string]$Description
+  )
+
+  foreach ($candidate in $Candidates) {
+    if (Test-Path -LiteralPath $candidate) {
+      return (Resolve-Path -LiteralPath $candidate).Path
+    }
+  }
+
+  throw "$Description not found. Checked: $($Candidates -join ', ')"
+}
+
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $VenvDir = Join-Path $ProjectRoot "venv"
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
-$RequirementsPath = Join-Path $ProjectRoot "requirements.txt"
+$RequirementsPath = Resolve-FirstExistingPath -Candidates @(
+  (Join-Path $ProjectRoot "requirements.txt"),
+  (Join-Path $ProjectRoot "Requirements.txt")
+) -Description "requirements file"
 $StampPath = Join-Path $VenvDir ".requirements.stamp"
 $PythonInstallRoot = Join-Path $ProjectRoot ".python"
 $PythonDownloadCache = Join-Path $ProjectRoot ".uv-cache"
