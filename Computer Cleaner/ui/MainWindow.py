@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+from hashlib import sha256
+import os
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +20,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QPushButton,
+    QFileDialog,
     QSizePolicy,
     QSplitter,
     QToolButton,
@@ -28,7 +32,12 @@ from Config import CONFIG
 from backend.models.swipe_model import SwipeCreate, SwipeDecision, SwipeSource
 from backend.services.swipe_service import SwipeService
 from database.Db import list_files
+from scanner.ScanFiles import scan_and_store
+from database.Db import list_files, upsert_file
 from logic.LabelHandler import LABEL_ARCHIVE, LABEL_KEEP, LABEL_NOT_NEEDED, save_label
+from preview.PreviewManager import build_preview
+from scanner.Metadata import get_basic_metadata
+from scanner.ScanFiles import iter_files, scan_and_store
 from ui.FileCard import FileCard
 from ui.InfoPanel import InfoPanel
 from ui.KeyboardShortcuts import add_shortcut
@@ -80,6 +89,41 @@ class _AlignedMenuButton(QToolButton):
 
 
 class _ModeSelector(QFrame):
+    _ACTIVE_MODE_STYLE = (
+        "QPushButton {"
+        "border: 1px solid #19c37d;"
+        "border-radius: 10px;"
+        "background: #121212;"
+        "color: #ffffff;"
+        "font-size: 12px;"
+        "font-weight: 600;"
+        "padding: 8px 12px;"
+        "text-align: center;"
+        "}"
+        "QPushButton:hover {"
+        "border: 1px solid #19c37d;"
+        "background: #1a1a1a;"
+        "color: #ffffff;"
+        "}"
+    )
+    _INACTIVE_MODE_STYLE = (
+        "QPushButton {"
+        "border: 1px solid #2f2f2f;"
+        "border-radius: 10px;"
+        "background: #121212;"
+        "color: #ffffff;"
+        "font-size: 12px;"
+        "font-weight: 600;"
+        "padding: 8px 12px;"
+        "text-align: center;"
+        "}"
+        "QPushButton:hover {"
+        "background: #1a1a1a;"
+        "border: 1px solid #19c37d;"
+        "color: #19c37d;"
+        "}"
+    )
+
     def __init__(self, on_mode_clicked, button_size: QSize) -> None:
         super().__init__()
         self._on_mode_clicked = on_mode_clicked
@@ -126,26 +170,6 @@ class _ModeSelector(QFrame):
                 border: 1px solid #2f2f2f;
                 border-radius: 12px;
             }
-            QPushButton#ModeButton {
-                border: 1px solid #2f2f2f;
-                border-radius: 10px;
-                background: #121212;
-                color: #ffffff;
-                font-size: 12px;
-                font-weight: 600;
-                padding: 8px 12px;
-                text-align: center;
-            }
-            QPushButton#ModeButton:hover {
-                background: #1a1a1a;
-                border-color: #19c37d;
-                color: #19c37d;
-            }
-            QPushButton#ModeButton[selected="true"] {
-                background: #121212;
-                border-color: #19c37d;
-                color: #ffffff;
-            }
             """
         )
 
@@ -161,9 +185,26 @@ class _ModeSelector(QFrame):
 
     def _select_mode(self, mode_name: str) -> None:
         self._active_mode = mode_name
+        self._apply_mode_visual_state()
         self._on_mode_clicked(mode_name)
         self._expanded = False
         self._arrange(immediate=False)
+
+    def _apply_mode_visual_state(self, *, sync_opacity: bool = False) -> None:
+        is_collapsed = not self._expanded
+        for mode, button in self._buttons.items():
+            is_active = mode == self._active_mode
+            should_enable = self._expanded or is_active
+            target_opacity = 1.0 if self._expanded or is_active else 0.0
+
+            button.setEnabled(should_enable)
+            button.setStyleSheet(self._ACTIVE_MODE_STYLE if is_active else self._INACTIVE_MODE_STYLE)
+            if sync_opacity:
+                self._effects[mode].setOpacity(target_opacity)
+            elif is_collapsed and is_active:
+                self._effects[mode].setOpacity(1.0)
+            else:
+                continue
 
     def _arrange(self, *, immediate: bool) -> None:
         others = [mode for mode in self._modes if mode != self._active_mode]
@@ -172,19 +213,15 @@ class _ModeSelector(QFrame):
             others[1]: self._padding + self._button_size.width() + self._spacing,
             self._active_mode: self._stack_x,
         }
+        self._apply_mode_visual_state()
 
         if immediate:
             self.setMinimumWidth(self._collapsed_width if not self._expanded else self._expanded_width)
             self.setMaximumWidth(self._collapsed_width if not self._expanded else self._expanded_width)
+            self._apply_mode_visual_state(sync_opacity=True)
             for mode, button in self._buttons.items():
                 x = left_positions[mode] if self._expanded else self._stack_x
                 button.move(x, self._padding)
-                opacity = 1.0 if self._expanded or mode == self._active_mode else 0.0
-                self._effects[mode].setOpacity(opacity)
-                button.setEnabled(self._expanded or mode == self._active_mode)
-                button.setProperty("selected", mode == self._active_mode)
-                button.style().unpolish(button)
-                button.style().polish(button)
             return
 
         group = QParallelAnimationGroup(self)
@@ -220,11 +257,6 @@ class _ModeSelector(QFrame):
             target_opacity = 1.0 if self._expanded or mode == self._active_mode else 0.0
             fade_anim.setEndValue(target_opacity)
             group.addAnimation(fade_anim)
-
-            button.setEnabled(self._expanded or mode == self._active_mode)
-            button.setProperty("selected", mode == self._active_mode)
-            button.style().unpolish(button)
-            button.style().polish(button)
 
         self._active_animation = group
         group.start()
@@ -268,6 +300,8 @@ class MainWindow(QMainWindow):
         self._preview_effect = QGraphicsOpacityEffect(self._preview_card)
         self._preview_card.setGraphicsEffect(self._preview_effect)
         self._preview_effect.setOpacity(1.0)
+        self._empty_state = self._build_empty_state()
+        self._empty_state.setParent(self._preview_stage)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
@@ -309,6 +343,7 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        self._empty_state.setGeometry(self._preview_rect())
         if not self._is_animating:
             self._preview_card.setGeometry(self._preview_rect())
 
@@ -348,6 +383,10 @@ class MainWindow(QMainWindow):
 
     def _build_menu(self) -> QMenu:
         menu = QMenu(self)
+        scan_action = QAction("Scan Folder", self)
+        scan_action.triggered.connect(self._choose_and_scan_folder)
+        menu.addAction(scan_action)
+        menu.addSeparator()
         for action_name in ("Settings", "History", "Search"):
             action = QAction(action_name, self)
             action.triggered.connect(
@@ -633,49 +672,45 @@ class MainWindow(QMainWindow):
         try:
             rows = list_files(limit=400)
             self._files = [dict(row) for row in rows]
+            self._reset_indices()
         except Exception as exc:
             self._files = []
-            self._status.setText(f"Database read failed. Using local sample cards. ({exc})")
+            self._reset_indices()
+            self._status.setText(f"Database read failed. ({exc})")
 
         if self._files:
-            self._current_index = 0
             return
 
-        self._files = [
-            {
-                "id": None,
-                "filename": "Budget_Report_2024.pdf",
-                "path": r"C:\Users\You\Downloads\Budget_Report_2024.pdf",
-                "filetype": "pdf",
-                "size": 328412,
-                "created_date": "2024-05-10T08:12:00",
-                "modified_date": "2024-12-20T17:24:00",
-            },
-            {
-                "id": None,
-                "filename": "Design_Notes.docx",
-                "path": r"C:\Users\You\Documents\Design_Notes.docx",
-                "filetype": "docx",
-                "size": 87321,
-                "created_date": "2022-11-01T13:15:00",
-                "modified_date": "2023-02-06T11:03:00",
-            },
-            {
-                "id": None,
-                "filename": "Screenshot_4932.png",
-                "path": r"C:\Users\You\Pictures\Screenshot_4932.png",
-                "filetype": "png",
-                "size": 1892240,
-                "created_date": "2023-10-18T19:32:00",
-                "modified_date": "2023-10-18T19:32:00",
-            },
-        ]
+        self._status.setText("No scanned files found. Use Menu → Scan Folder to start.")
+
+    def _choose_and_scan_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Select folder to scan", str(Path.home()))
+        if not folder:
+            self._status.setText("Folder scan canceled.")
+            return
+        self._scan_folder(Path(folder))
+
+    def _scan_folder(self, folder: Path) -> None:
+        try:
+            scanned = scan_and_store(folder)
+            rows = list_files(limit=400)
+            self._files = [dict(row) for row in rows]
+            self._reset_indices()
+            self._render_current_file()
+            self._status.setText(f"Scan complete: {scanned} files indexed from {folder}.")
+        except Exception as exc:
+            self._status.setText(f"Folder scan failed ({exc})")
+            self._status.setText(f"Database read failed. ({exc})")
         self._current_index = 0
 
     def _render_current_file(self, *, action_text: str | None = None) -> None:
+        self._empty_state.setGeometry(self._preview_rect())
         if not self._files:
+            self._set_empty_state_visible(True)
+            self._subtitle.setText("Training mode | Queue is empty")
             return
 
+        self._set_empty_state_visible(False)
         current = self._files[self._current_index]
         total = len(self._files)
         self._preview_card.set_file(current)
@@ -696,6 +731,80 @@ class MainWindow(QMainWindow):
     def _current_file(self) -> dict[str, Any]:
         return self._files[self._current_index]
 
+    def _reset_indices(self) -> None:
+        self._current_index = 0
+        self._pending_index = 0
+    def _set_empty_state_visible(self, is_visible: bool) -> None:
+        self._empty_state.setVisible(is_visible)
+        self._preview_card.setVisible(not is_visible)
+        self._action_dock.setEnabled(not is_visible)
+
+    def _common_user_folders(self) -> list[Path]:
+        home = Path.home()
+        candidates = [
+            home / "Desktop",
+            home / "Documents",
+            home / "Downloads",
+            home / "Pictures",
+            home / "Videos",
+            home / "Music",
+        ]
+        return [folder for folder in candidates if folder.exists() and folder.is_dir()]
+
+    def _deterministic_folder_choice(self) -> Path | None:
+        folders = sorted(self._common_user_folders(), key=lambda item: str(item).lower())
+        if not folders:
+            return None
+        digest = sha256(str(Path.home()).encode("utf-8")).hexdigest()
+        index = int(digest[:8], 16) % len(folders)
+        return folders[index]
+
+    def _select_folder(self) -> None:
+        selected = QFileDialog.getExistingDirectory(self, "Select folder to scan", str(Path.home()))
+        if not selected:
+            self._status.setText("Folder selection cancelled.")
+            return
+        self._scan_folder_and_prepare_queue(Path(selected))
+
+    def _choose_random_folder(self) -> None:
+        selected = self._deterministic_folder_choice()
+        if selected is None:
+            self._status.setText("No common user folders were found.")
+            return
+        self._scan_folder_and_prepare_queue(selected)
+
+    def _scan_folder_and_prepare_queue(self, folder: Path) -> None:
+        folder = folder.expanduser()
+        if not folder.exists() or not folder.is_dir():
+            self._status.setText(f"Invalid folder selected: {folder}")
+            return
+
+        try:
+            scanned_count = scan_and_store(folder)
+            for file_path in iter_files(folder):
+                metadata = get_basic_metadata(file_path)
+                preview_path = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
+                upsert_file(
+                    {
+                        "path": str(metadata.path),
+                        "filename": metadata.filename,
+                        "filetype": metadata.filetype,
+                        "mime_type": metadata.mime_type,
+                        "size": metadata.size,
+                        "created_date": metadata.created_date,
+                        "modified_date": metadata.modified_date,
+                        "preview_path": str(preview_path) if preview_path else None,
+                    }
+                )
+            self._load_files()
+            self._render_current_file()
+            if self._files:
+                self._status.setText(f"Queued {len(self._files)} files after scanning {scanned_count} files from {folder}.")
+            else:
+                self._status.setText("Scan completed but no queueable files were found.")
+        except Exception as exc:
+            self._status.setText(f"Folder processing failed ({exc})")
+
     def _on_keep(self) -> None:
         self._handle_decision("KEEP", LABEL_KEEP, SwipeDecision.KEEP, QPoint(260, 0))
 
@@ -707,6 +816,16 @@ class MainWindow(QMainWindow):
 
     def _handle_decision(self, action_name: str, label_name: str, decision: SwipeDecision, offset: QPoint) -> None:
         if self._is_animating or not self._files or self._pending_decision is not None:
+        self._handle_decision("KEEP", SwipeDecision.KEEP, QPoint(260, 0))
+
+    def _on_archive(self) -> None:
+        self._handle_decision("ARCHIVE", SwipeDecision.ARCHIVE, QPoint(0, -220))
+
+    def _on_not_needed(self) -> None:
+        self._handle_decision("NOT NEEDED", SwipeDecision.DELETE, QPoint(-260, 0))
+
+    def _handle_decision(self, action_name: str, decision: SwipeDecision, offset: QPoint) -> None:
+        if self._is_animating or not self._files:
             return
 
         self._pending_decision = {
@@ -768,8 +887,27 @@ class MainWindow(QMainWindow):
         if isinstance(file_id, int):
             try:
                 save_label(file_id, label_name, notes=reason)
+        path = str(current.get("path") or "")
+        filename = str(current.get("filename") or Path(path).name or "unknown")
+        filetype = str(current.get("filetype") or Path(path).suffix.lstrip(".") or "unknown")
+        size = int(current.get("size") or 0)
+
+        if path:
+            try:
+                hash_value = self._compute_file_hash(path)
+                self._swipe_service.save_swipe(
+                    SwipeCreate(
+                        file_path=path,
+                        file_name=filename,
+                        file_type=filetype,
+                        file_size=max(size, 0),
+                        file_hash=hash_value,
+                        decision=decision,
+                        source=SwipeSource.HUMAN,
+                    )
+                )
             except Exception as exc:
-                self._status.setText(f"Label save failed ({exc})")
+                self._status.setText(f"Decision save failed ({exc})")
 
         path = str(current.get("path") or "")
         filename = str(current.get("filename") or Path(path).name or "unknown")
@@ -888,6 +1026,9 @@ class MainWindow(QMainWindow):
         self._status.setText("Details expanded." if visible else "Details hidden.")
 
     def _open_file(self) -> None:
+        if not self._files:
+            self._status.setText("Queue is empty.")
+            return
         current = self._current_file()
         raw_path = current.get("path")
         if not isinstance(raw_path, str) or not raw_path:
@@ -922,3 +1063,19 @@ class MainWindow(QMainWindow):
 
     def _select_folder(self) -> None:
         self._status.setText("Folder picker is not wired yet.")
+    def _compute_file_hash(self, raw_path: str) -> str | None:
+        file_path = Path(raw_path)
+        if not file_path.exists() or not file_path.is_file():
+            return None
+
+        digest = sha256()
+        try:
+            with file_path.open("rb") as handle:
+                while True:
+                    block = handle.read(1024 * 1024)
+                    if not block:
+                        break
+                    digest.update(block)
+        except Exception:
+            return None
+        return digest.hexdigest()
