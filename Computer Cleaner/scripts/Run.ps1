@@ -4,49 +4,65 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Resolve-FirstExistingPath {
+  param(
+    [string[]]$Candidates,
+    [string]$Description
+  )
+
+  foreach ($candidate in $Candidates) {
+    if (Test-Path -LiteralPath $candidate) {
+      return (Resolve-Path -LiteralPath $candidate).Path
+    }
+  }
+
+  throw "$Description not found. Checked: $($Candidates -join ', ')"
+}
+
 try {
   $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
   $VenvDir = Join-Path $ProjectRoot "venv"
   $VenvActivate = Join-Path $VenvDir "Scripts\Activate.ps1"
   $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
   $AppPath = Join-Path $ProjectRoot "App.py"
-  $RequirementsPath = Join-Path $ProjectRoot "requirements.txt"
+  $SetupScript = Join-Path $ProjectRoot "scripts\Setup.ps1"
+  $RequirementsPath = Resolve-FirstExistingPath -Candidates @(
+    (Join-Path $ProjectRoot "requirements.txt"),
+    (Join-Path $ProjectRoot "Requirements.txt")
+  ) -Description "requirements file"
+
   $LogDir = Join-Path $ProjectRoot "data\logs"
   $StdOutPath = Join-Path $LogDir "launcher-output.log"
   $StdErrPath = Join-Path $LogDir "launcher-error.log"
 
   Write-Output "Current directory: $(Get-Location)"
   Write-Output "Project root: $ProjectRoot"
-  Write-Output "Venv activate: $VenvActivate"
+  Write-Output "Setup script: $SetupScript"
   Write-Output "Python: $VenvPython"
   Write-Output "App: $AppPath"
   Write-Output "Requirements: $RequirementsPath"
 
-  if (-not (Test-Path -LiteralPath $RequirementsPath)) {
-    throw "requirements.txt not found at $RequirementsPath"
-  }
-
   if (-not (Test-Path -LiteralPath $AppPath)) {
     throw "App.py not found at $AppPath"
+  }
+
+  if ($AutoSetup -or -not (Test-Path -LiteralPath $VenvPython) -or -not (Test-Path -LiteralPath $VenvActivate)) {
+    if (-not (Test-Path -LiteralPath $SetupScript)) {
+      throw "Setup script not found at $SetupScript"
+    }
+    Write-Output "Running setup to ensure dependencies are installed..."
+    & $SetupScript
   }
 
   if (-not (Test-Path -LiteralPath $VenvPython)) {
     throw "python.exe not found at $VenvPython"
   }
 
-  if (-not (Test-Path -LiteralPath $VenvActivate)) {
-    throw "Activate.ps1 not found at $VenvActivate"
-  }
-
   Set-Location -LiteralPath $ProjectRoot
   New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
   Remove-Item -LiteralPath $StdOutPath, $StdErrPath -Force -ErrorAction SilentlyContinue
 
-  . $VenvActivate
-  $ActivatedPython = (Get-Command python).Source
-  Write-Output "Activated python: $ActivatedPython"
-
-  $process = Start-Process -FilePath $ActivatedPython -ArgumentList @("-u", ('"' + $AppPath + '"')) -WorkingDirectory $ProjectRoot -PassThru -RedirectStandardOutput $StdOutPath -RedirectStandardError $StdErrPath
+  $process = Start-Process -FilePath $VenvPython -ArgumentList @("-u", ('"' + $AppPath + '"')) -WorkingDirectory $ProjectRoot -PassThru -RedirectStandardOutput $StdOutPath -RedirectStandardError $StdErrPath
 
   Start-Sleep -Seconds 2
   if ($process.HasExited) {
@@ -62,7 +78,6 @@ try {
   }
 
   Write-Output "App launched successfully. PID: $($process.Id)"
-
 }
 catch {
   Write-Output ""
