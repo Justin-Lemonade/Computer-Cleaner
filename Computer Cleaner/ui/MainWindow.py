@@ -816,16 +816,6 @@ class MainWindow(QMainWindow):
 
     def _handle_decision(self, action_name: str, label_name: str, decision: SwipeDecision, offset: QPoint) -> None:
         if self._is_animating or not self._files or self._pending_decision is not None:
-        self._handle_decision("KEEP", SwipeDecision.KEEP, QPoint(260, 0))
-
-    def _on_archive(self) -> None:
-        self._handle_decision("ARCHIVE", SwipeDecision.ARCHIVE, QPoint(0, -220))
-
-    def _on_not_needed(self) -> None:
-        self._handle_decision("NOT NEEDED", SwipeDecision.DELETE, QPoint(-260, 0))
-
-    def _handle_decision(self, action_name: str, decision: SwipeDecision, offset: QPoint) -> None:
-        if self._is_animating or not self._files:
             return
 
         self._pending_decision = {
@@ -887,27 +877,8 @@ class MainWindow(QMainWindow):
         if isinstance(file_id, int):
             try:
                 save_label(file_id, label_name, notes=reason)
-        path = str(current.get("path") or "")
-        filename = str(current.get("filename") or Path(path).name or "unknown")
-        filetype = str(current.get("filetype") or Path(path).suffix.lstrip(".") or "unknown")
-        size = int(current.get("size") or 0)
-
-        if path:
-            try:
-                hash_value = self._compute_file_hash(path)
-                self._swipe_service.save_swipe(
-                    SwipeCreate(
-                        file_path=path,
-                        file_name=filename,
-                        file_type=filetype,
-                        file_size=max(size, 0),
-                        file_hash=hash_value,
-                        decision=decision,
-                        source=SwipeSource.HUMAN,
-                    )
-                )
             except Exception as exc:
-                self._status.setText(f"Decision save failed ({exc})")
+                self._status.setText(f"Label save failed ({exc})")
 
         path = str(current.get("path") or "")
         filename = str(current.get("filename") or Path(path).name or "unknown")
