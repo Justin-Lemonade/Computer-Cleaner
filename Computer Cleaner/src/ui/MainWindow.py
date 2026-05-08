@@ -39,11 +39,12 @@ from PySide6.QtWidgets import (
 from Config import CONFIG
 from backend.models.swipe_model import SwipeCreate, SwipeDecision, SwipeSource
 from backend.services.swipe_service import SwipeService
-from database.Db import get_connection, list_files, upsert_file
+from database.Db import find_file_by_hash, get_connection, list_files, mark_file_seen, mark_file_sorted, upsert_file
 from logic.LabelHandler import LABEL_ARCHIVE, LABEL_KEEP, LABEL_NOT_NEEDED, save_label
 from preview.PreviewManager import build_preview
 from scanner.Metadata import get_basic_metadata
 from scanner.ScanFiles import iter_files
+from utils.Hashing import compute_file_hash
 from ui.FileCard import FileCard
 from ui.InfoPanel import InfoPanel
 from ui.KeyboardShortcuts import add_shortcut
@@ -1127,6 +1128,54 @@ class MainWindow(QMainWindow):
             if file_path is None:
                 break
             try:
+                metadata = get_basic_metadata(file_path)
+                hash_value = compute_file_hash(file_path)
+                existing_hash_row = find_file_by_hash(hash_value) if hash_value else None
+                if existing_hash_row and int(existing_hash_row["already_sorted"] or 0) == 1:
+                    mark_file_seen(
+                        file_id=int(existing_hash_row["id"]),
+                        path=str(metadata.path),
+                        modified_date=metadata.modified_date,
+                        preview_path=existing_hash_row["preview_path"],
+                        file_hash=hash_value,
+                    )
+                    continue
+
+                preview_path_value = existing_hash_row["preview_path"] if existing_hash_row else None
+                if not preview_path_value:
+                    built_preview = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
+                    preview_path_value = str(built_preview) if built_preview else None
+
+                row_id = upsert_file(
+                    {
+                        "path": str(metadata.path),
+                        "filename": metadata.filename,
+                        "filetype": metadata.filetype,
+                        "mime_type": metadata.mime_type,
+                        "size": metadata.size,
+                        "created_date": metadata.created_date,
+                        "modified_date": metadata.modified_date,
+                        "preview_path": preview_path_value,
+                    }
+                )
+                mark_file_seen(
+                    file_id=row_id,
+                    path=str(metadata.path),
+                    modified_date=metadata.modified_date,
+                    preview_path=preview_path_value,
+                    file_hash=hash_value,
+                )
+                row = {
+                    "id": row_id,
+                    "path": str(metadata.path),
+                    "filename": metadata.filename,
+                    "filetype": metadata.filetype,
+                    "mime_type": metadata.mime_type,
+                    "size": metadata.size,
+                    "created_date": metadata.created_date.isoformat() if metadata.created_date else None,
+                    "modified_date": metadata.modified_date.isoformat() if metadata.modified_date else None,
+                    "preview_path": preview_path_value,
+                }
                 row = self._build_row_for_path(file_path)
                 self._files.append(row)
                 generated += 1
@@ -1495,6 +1544,12 @@ class MainWindow(QMainWindow):
                     )
                 )
             except Exception as exc:
+                self._status.setText(f"Decision save failed ({exc})")
+        if isinstance(file_id, int):
+            try:
+                mark_file_sorted(file_id)
+            except Exception:
+                pass
                 errors.append(f"swipe save failed: {exc}")
 
         elapsed = time.perf_counter() - started
@@ -1744,6 +1799,8 @@ class MainWindow(QMainWindow):
             return
         self._status.setText("Training mode active.")
 
+    def _compute_file_hash(self, raw_path: str) -> str | None:
+        return compute_file_hash(Path(raw_path))
     def _compute_file_hash(self, raw_path: str, *, max_bytes: int | None = None) -> str | None:
         file_path = Path(raw_path)
         if not file_path.exists() or not file_path.is_file():
