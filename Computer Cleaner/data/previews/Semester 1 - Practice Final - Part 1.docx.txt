@@ -1,0 +1,54 @@
+SRA Physics – Semester 1 Part 1 Practice Test 
+1D and 2D Kinematics (c2,c4), Forces (c3), Conservation of Energy (c6)
+1. Ice Penguin Slide (1D Kinematics + Friction)
+A 2.0 kg penguin wearing socks slides across an icy hallway at 6.0 m/s. The ice isn’t perfect, and the coefficient of kinetic friction between the penguin and the ice is 0.25.
+a) What is the penguin’s acceleration?
+b) How far does the penguin slide before coming to rest?
+c) How long does it take for the penguin to stop?
+2. Goat on a Mountain Path (Kinematics + Friction Energy)
+A 4.0 kg mountain goat starts from rest at the top of a snowy 30° slope that is 5.0 m long. The goat’s hooves experience a coefficient of kinetic friction of 0.20.
+a) Use kinematics to find the goat’s speed at the bottom.
+b) How much energy was converted to heat through friction?
+3. Launching a Wizard’s Spell (Vertical Motion)
+A wizard launches a glowing orb straight upward with a speed of 12 m/s. The orb has a mass of 0.50 kg.
+a) How high does the orb rise?
+b) What is its speed when it returns to the launch point?
+c) How long is the orb in the air?
+4. Dragon Fireball (2D Projectile Motion)
+A dragon launches a fireball from ground level at 20 m/s, aimed 35° above the horizontal.
+a) How long is the fireball in the air?
+b) What maximum height does it reach?
+c) How far does it travel before hitting the ground?
+5. Pirate Cannon Mishap (Horizontal Projectile)
+A pirate accidentally fires a cannonball horizontally at 15 m/s from the top of a 45 m tall cliff.
+a) How long does the cannonball take to hit the ocean?
+b) How far from the base of the cliff does it land?
+c) What is the speed of the cannonball just before impact?
+6. Racing Rhino Brakes (Work–Energy + Friction)
+A 1200 kg racing rhino charges forward at 22 m/s, then slams on the brakes. The coefficient of kinetic friction between the rhino’s shoes and the ground is 0.70.
+a) How far does the rhino skid before stopping?
+b) How long does it take to come to rest?
+7. Blowdart and Wooden Tortoise (Momentum, Inelastic)
+A 0.040 kg blowdart traveling at 400 m/s embeds itself in a 3.0 kg wooden tortoise resting on a frictionless surface.
+a) What is the speed of the tortoise and dart immediately after the collision?
+b) How much kinetic energy is lost during the collision?
+8. Bumper-Car Hamsters (Momentum + Friction)
+A 2.0 kg hamster zooms across a table at 5.0 m/s and collides head-on with a 1.0 kg hamster at rest. They stick together and slide across the surface, where the coefficient of kinetic friction is 0.30.
+a) What is their speed right after the collision?
+b) How far do they slide before stopping?
+9. Superball Bounce of Doom (Energy + Momentum)
+A 0.20 kg superball is dropped from a height of 3.0 m and bounces straight back up to a height of 1.8 m.
+a) What is the ball’s speed just before it hits the ground?
+b) What is its speed just after leaving the ground?
+c) If the collision with the ground lasts 0.015 s, what is the average force the ground exerts on the ball?
+10. Ninja Ramp Ambush (Energy → Momentum → Friction)
+A 1.5 kg ninja slides silently down a frictionless ramp from a height of 2.0 m and collides elastically with a 0.5 kg training dummy at the bottom. After the collision, the dummy slides across a rough floor with a coefficient of kinetic friction of 0.40.
+a) What is the ninja’s speed just before the collision?
+b) What is the dummy’s speed immediately after the collision?
+c) How far does the dummy slide before stopping?
+11. Ice Hockey Puck Wizards (2D Collision)
+A 1.5 kg enchanted puck glides east at 4.0 m/s and collides with a 2.0 kg cursed puck initially at rest on frictionless ice. After the collision, the enchanted puck moves at 2.5 m/s at an angle of 30° north of east.
+a) Find the x- and y-components of the enchanted puck’s final momentum.
+b) Determine the speed and direction of the cursed puck after the collision.
+12. Skateboarding Unicorn (Speed vs. Potential Energy)
+A 3.0 kg unicorn on a skateboard moves at 6.0 m/s along a smooth

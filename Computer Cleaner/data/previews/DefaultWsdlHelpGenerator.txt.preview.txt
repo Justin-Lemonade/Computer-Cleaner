@@ -1,0 +1,121 @@
+<%--
+//
+// DefaultWsdlHelpGenerator.aspx: 
+//
+// Author:
+//   Lluis Sanchez Gual (lluis@ximian.com)
+//
+// (C) 2003 Ximian, Inc.  http://www.ximian.com
+//
+--%>
+
+<%@ Import Namespace="System.Collections" %>
+<%@ Import Namespace="System.Collections.Generic" %>
+<%@ Import Namespace="System.IO" %>
+<%@ Import Namespace="System.Xml.Serialization" %>
+<%@ Import Namespace="System.Xml" %>
+<%@ Import Namespace="System.Xml.Schema" %>
+<%@ Import Namespace="System.Web.Services" %>
+<%@ Import Namespace="System.Web.Services.Description" %>
+<%@ Import Namespace="System.Web.Services.Configuration" %>
+<%@ Import Namespace="System.Web.Configuration" %>
+<%@ Import Namespace="System" %>
+<%@ Import Namespace="System.Net" %>
+<%@ Import Namespace="System.Globalization" %>
+<%@ Import Namespace="System.Resources" %>
+<%@ Import Namespace="System.Diagnostics" %>
+<%@ Import Namespace="System.CodeDom" %>
+<%@ Import Namespace="System.CodeDom.Compiler" %>
+<%@ Import Namespace="Microsoft.CSharp" %>
+<%@ Import Namespace="Microsoft.VisualBasic" %>
+<%@ Import Namespace="System.Text" %>
+<%@ Import Namespace="System.Text.RegularExpressions" %>
+<%@ Import Namespace="System.Security.Cryptography.X509Certificates" %>
+<%@ Assembly name="System.Web.Services" %>
+<%@ Page debug="true" %>
+
+<html>
+<script language="C#" runat="server">
+
+ServiceDescriptionCollection descriptions;
+XmlSchemas schemas;
+
+string WebServiceName;
+string WebServiceDescription;
+string PageName;
+
+string DefaultBinding;
+ArrayList ServiceProtocols;
+
+string CurrentOperationName;
+string CurrentOperationBinding;
+string OperationDocumentation;
+string CurrentOperationFormat;
+bool CurrentOperationSupportsTest;
+ArrayList InParams;
+ArrayList OutParams;
+string CurrentOperationProtocols;
+int CodeTextColumns = 95;
+BasicProfileViolationCollection ProfileViolations;
+
+void Page_Load(object sender, EventArgs e)
+{
+	descriptions = (ServiceDescriptionCollection) Context.Items["wsdls"];
+	schemas = (XmlSchemas) Context.Items["schemas"];
+
+	ServiceDescription desc = descriptions [0];
+	if (schemas.Count == 0) schemas = desc.Types.Schemas;
+	
+	Service service = desc.Services[0];
+	WebServiceName = service.Name;
+	if (desc.Bindings.Count == 0)
+		return;
+	
+	DefaultBinding = desc.Bindings[0].Name;
+	WebServiceDescription = service.Documentation;
+	if (WebServiceDescription == "" || WebServiceDescription == null)
+		WebServiceDescription = "Description has not been provided";
+	ServiceProtocols = FindServiceProtocols (null);
+	
+	CurrentOperationName = Request.QueryString["op"];
+	CurrentOperationBinding = Request.QueryString["bnd"];
+	if (CurrentOperationName != null) BuildOperationInfo ();
+
+	PageName = HttpUtility.UrlEncode (Path.GetFileName(Request.Path), Encoding.UTF8);
+
+	ArrayList list = new ArrayList ();
+	foreach (ServiceDescription sd in descriptions) {
+		foreach (Binding bin in sd.Bindings)
+			if (bin.Extensions.Find (typeof(SoapBinding)) != null) list.Add (bin);
+	}
+
+	BindingsRepeater.DataSource = list;
+	Page.DataBind();
+	
+	ProfileViolations = new BasicProfileViolationCollection ();
+	foreach (WsiProfilesElement claims in ((WebServicesSection) WebConfigurationManager.GetSection("system.web/webServices")).ConformanceWarnings)
+		if (claims.Name != WsiProfiles.None)
+			WebServicesInteroperability.CheckConformance (claims.Name, descriptions, ProfileViolations);
+}
+
+void BuildOperationInfo ()
+{
+	InParams = new ArrayList ();
+	OutParams = new ArrayList ();
+	
+	Port port = FindPort (CurrentOperationBinding, null);
+	Binding binding = descriptions.GetBinding (port.Binding);
+	
+	PortType portType = descriptions.GetPortType (binding.Type);
+	Operation oper = FindOperation (portType, CurrentOperationName);
+	
+	OperationDocumentation = oper.Documentation;
+	if (OperationDocumentation == null || OperationDocumentation == "")
+		OperationDocumentation = "No additional remarks";
+	
+	foreach (OperationMessage opm in oper.Messages)
+	{
+		if (opm is OperationInput)
+			BuildParameters (InParams, opm);
+		else if (opm is OperationOutput)
+			BuildParameters (OutParams

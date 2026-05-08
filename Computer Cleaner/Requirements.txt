@@ -1,6 +1,14 @@
 pillow
 pymupdf
 python-docx
+python-pptx
+openpyxl
+odfpy
+beautifulsoup4
+extract-msg
+py7zr
+rarfile
+chardet
 streamlit
 pandas
 numpy

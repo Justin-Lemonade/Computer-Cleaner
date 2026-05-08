@@ -1,0 +1,30 @@
+"Blooket
+Import Template",,,,,,,
+Question #,Question Text,Answer 1,Answer 2,"Answer 3
+(Optional)","Answer 4
+(Optional)","Time Limit (sec)
+(Max: 300 seconds)","Correct Answer(s)
+(Only include Answer #)"
+1,Social psychology focuses on ________ in predicting human behavior.,personality traits,genetic predispositions,biological forces,situational factors,30,Answer 4
+2,Making internal attributions for your successes and external attributions for your failures is an example of ________.,actor-observer bias,fundamental attribution error,self-serving bias,just-world hypothesis,30,Answer 3
+3,Collectivistic cultures are to ________ as individualistic cultures are to ________.,dispositional; situational,situational; dispositional,autonomy; group harmony,just-world hypothesis; self-serving bias,30,Answer 2
+4,"According to the actor-observer bias, we have more information about ________.",situational influences,influences on our own behavior,influences on others’ behavior,dispositional influences,30,Answer 2
+5,A(n) ________ is a set of group expectations for appropriate thoughts and behaviors of its members.,social role,social norm,script,attribution,30,Answer 2
+6,Jose’s behavior on his first day of soccer practice is reflective of ________.,a script,social influence,good athletic behavior,normative behavior,30,Answer 1
+7,"Teenagers often follow social norms when buying clothes, motivated by ________.",following parents’ rules,saving money,fitting in,looking good,30,Answer 3
+8,"In the Stanford prison experiment, the power of ________ influenced behavior.",scripts,social norms,conformity,social roles,30,Answer 4
+9,"Attitudes describe our ________ of people, objects, and ideas.",treatment,evaluations,cognitions,knowledge,30,Answer 2
+10,Cognitive dissonance disrupts our sense of ________.,dependency,unpredictability,consistency,power,30,Answer 3
+11,"For the central route to persuasion to be effective, the audience must be ________ and ________.",analytical; motivated,attentive; happy,intelligent; unemotional,gullible; distracted,30,Answer 1
+12,Cues used in peripheral route persuasion include all except ________.,celebrity endorsement,positive emotions,attractive models,factual information,30,Answer 4
+13,"In the Asch experiment, participants conformed due to ________ social influence.",informational,normative,inspirational,persuasive,30,Answer 2
+14,Informational social influence is more likely under ________.,when individuals want to fit in,when the answer is unclear,when the group has expertise,both b and c,30,Answer 4
+15,Social loafing occurs when ________.,individual performance cannot be evaluated,the task is easy,both a and b,none of the above,30,Answer 3
+16,Group members modifying opinions to align with a group consensus demonstrates ________.,group cohesion,social polarization,groupthink,social loafing,30,Answer 3
+17,Prejudice is to ________ as discrimination is to ________.,feelings; behavior,thoughts; feelings,feelings; thoughts,behavior; feelings,30,Answer 1
+18,________ occurs when the out-group is blamed for the in-group’s frustration.,stereotyping,in-group bias,scapegoating,ageism,30,Answer 3
+19,Seeking information that supports our stereotypes demonstrates ________.,scapegoating,confirmation bias,self-fulfilling prophecy,in-group bias,30,Answer 2
+20,Bullying from boys is to ________ as bullying from girls is to ________.,emotional harm; physical harm,physical harm; emotional harm,psychological harm; physical harm,social exclusion; verbal taunting,30,Answer 2
+21,Which adolescent is least likely to be bullied?,a child with a physical disability,a transgender adolescent,an emotionally sensitive boy,the captain of the football team,30,Answer 4
+22,The bystander effect occurs due to ________.,desensitization to violence,people not noticing the emergency,diffusion of responsibility,emotional insensitivity,30,Answer 3
+23,Altruism is motivated by ________.,feeling good about oneself,selfless helping of others,earning a reward,showing brave

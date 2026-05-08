@@ -1,0 +1,87 @@
+// Deutsch
+LanguageName:           Deutsch
+
+// Settings and Menu
+FpsTutorial:            First Steps into Gaming
+EpisodeSubtitle:	    First Person Shooter
+Pause:                  Pause
+Settings:               Einstellungen
+
+Back:                   Zurück
+InvertYAxis:            Y-Achse Invertiert 
+Volume:                 Lautstärke
+MouseSensitivity:       Maussensibilität
+Quality:                Qualität
+Language:               Sprache
+Quit:                   Beenden
+StartGame:              Spiel Starten
+de-de:                  Deutsch
+Very Low:               Sehr Niedrig
+Low:                    Niedrig
+Medium:                 Mittel
+High:                   Hoch
+Very High:              Sehr Hoch
+Ultra:                  Ultra
+Resolution:             Auflösung
+Fullscreen:             Vollbild
+Windowed:               Fenster
+Borderless:             Randlos
+1920x1080:              1920x1080
+Loading:                Lade...
+CloseTextBox:           Text Box Schließen
+EndGame:                Spiel Beenden
+Credits:                Credits
+
+//CreditsMenu
+LBLCredits:		Credits
+CreditsHeadline:	Ein Spiel von
+CollaborationHeadline:	In Zusammenarbeit mit
+TranslatorHeadline:     Übersetzt von
+TranslatorCredits:      IndieBurg
+
+
+// Ingame Overlay always Visible
+
+Interaction:            Aktionen
+Look:                   Umschauen
+Fire:                   Schießen
+Sprint:                 Sprinten
+Movement:               Bewegung
+Interact:               Benutzen
+Jump:                   Springen
+Crouch:                 Ducken
+
+LookXPositive:          Rechts
+LookXNegative:          Links
+LookYPositive:          Hoch
+LookYNegative:          Runter
+
+MoveXPositive:          Rechts
+MoveXNegative:          Links
+MoveYPositive:          Vorwärts
+MoveYNegative:          Rückwärts
+
+//Pop-Ups
+
+PopupWalkForward:       vorwärts laufen 
+PopupWalkBackward:      rückwärts laufen
+PopupWalkLeftRight:     Laufen Links / Rechts
+PopupLookUpDown:        Umschauen Hoch / Runter
+PopupLookLeftRight:     Umschauen Links/ Rechts
+
+PopupCrouch:            halten zum Ducken
+PopupSprint:            halten zum Sprinten
+PopupJump:              Springen
+
+PopupInteract:          Benutzen
+PopupFire:              Schießen
+WinMessageHeadline:	    Glückwunsch!
+WinMessageText:		    Danke fürs Spielen. Sie haben das Spiel erfolgreich beendet! Sie können weiter Zielübungen machen oder die Anwendung beenden. 
+WinMessageHeadlineAllTargets:       Glückwunsch!
+WinMessageTextAllTargets:           Danke fürs Spielen. Sie haben das Spiel erfolgreich beendet!
+
+//Photosensitive Warning
+
+WarningHeadline:         Gesundheitswarnhinweis
+WarningText:             Spielen Sie stets in einem gut beleuchteten Raum. Legen Sie eine Pause von 15 Minuten pro Spielstunde ein. Unterbrechen Sie das Spielen, wenn Schwindelgefühle, Übelkeit, Müdigkeit oder Kopfschmerzen auftreten. Bei einigen Personen kann es zu epileptischen Anfällen kommen, wenn sie bestimmten Lichtfrequenzen, flackernden Lichtquellen oder geometrischen Formen und Mustern ausgesetzt sind. Bestimmte Lichtfrequenzen in Fernsehbildschirm-Hintergründen oder bei Computerspielen können bei diesen Personen einen epileptischen Anfall auslösen. Befragen Sie Ihren Arzt, wenn Sie oder eines Ihrer Familienmitglieder an Epilepsie leiden, bevor Sie dieses Spiel spielen. Brechen Sie das Spiel sofort ab und suchen Sie einen Arzt auf, sollte eines der folgenden Symptome beim Spielen auftreten: Sehstörungen, Augen- und Muskelzucken, Bewusstseinsstörungen, Orientierungsverlust, unfreiwillige Bewegungen und Krämpfe.
+Skip:                    Überspringen

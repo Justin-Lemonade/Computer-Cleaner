@@ -1,0 +1,29 @@
+"Blooket
+Import Template",,,,,,,
+Question #,Question Text,Answer 1,Answer 2,"Answer 3
+(Optional)","Answer 4
+(Optional)","Time Limit (sec)
+(Max: 300 seconds)","Correct Answer(s)
+(Only include Answer #)"
+1,Personality is thought to be ________.,short term and easily changed,a pattern of short-term characteristics,unstable and short term,"long term, stable and not easily changed",300,4
+2,"The long-standing traits and patterns that propel individuals to consistently think, feel, and behave in specific ways are known as ________.",psychodynamic,temperament,humors,personality,300,4
+3,________ is credited with the first comprehensive theory of personality.,Hippocrates,Gall,Wundt,Freud,300,4
+4,An early science that tried to correlate personality with measurements of parts of a person’s skull is known as ________.,phrenology,psychology,physiology,personality psychology,300,1
+5,The id operates on the ________ principle.,reality,pleasure,instant gratification,guilt,300,2
+6,The ego defense mechanism in which a person who is confronted with anxiety returns to a more immature behavioral stage is called ________.,repression,regression,reaction formation,rationalization,300,2
+7,The Oedipus complex occurs in the ________ stage of psychosexual development.,oral,anal,phallic,latency,300,3
+8,"The universal bank of ideas, images, and concepts that have been passed down through the generations from our ancestors refers to ________.",archetypes,intuition,collective unconscious,personality types,300,3
+9,Self-regulation is also known as ________.,self-efficacy,will power,internal locus of control,external locus of control,300,2
+10,Your level of confidence in your own abilities is known as ________.,self-efficacy,self-concept,self-control,self-esteem,300,1
+11,Jane believes that she got a bad grade on her psychology paper because her professor doesn’t like her. Jane most likely has an _______ locus of control.,internal,external,intrinsic,extrinsic,300,2
+12,Self-concept refers to ________.,our level of confidence in our own abilities,all of our thoughts and feelings about ourselves,the belief that we control our own outcomes,the belief that our outcomes are outside of our control,300,2
+13,The idea that people’s ideas about themselves should match their actions is called ________.,confluence,conscious,conscientiousness,congruence,300,4
+14,"The way a person reacts to the world, starting when they are very young, including the person’s activity level is known as ________.",traits,temperament,heritability,personality,300,2
+15,"Brianna is 18 months old. She cries frequently, is hard to soothe, and wakes frequently during the night. According to Thomas and Chess, she would be considered ________.",an easy baby,a difficult baby,a slow to warm up baby,a colicky baby,300,2
+16,"According to the findings of the Minnesota Study of Twins Reared Apart, identical twins, whether raised together or apart have ________ personalities.",slightly different,very different,slightly similar,very similar,300,4
+17,Temperament refers to ________.,"inborn, genetically based personality differences",characteristic ways of behaving,"conscientiousness, agreeableness, neuroticism, openness, and extroversion",degree of introversion-extroversion,300,1
+18,"According to the Eysencks’ theory, people who score high on neuroticism tend to be ________.",calm,stable,outgoing,anxious,300,4
+19,The United States is considered a ________ culture.,collectivistic,individualist,traditional,nontraditional,300,2
+20,The concept that people choose to move to places that are compatible with their personalities and needs is known as ________.,selective migration,personal oriented personality,socially oriented personality,individualism,300,1
+21,Which of the following is NOT a projective test?,Minnesota Multiphasic Personality Inventory (MMPI),Rorschach Inkblot Test,Thematic Apperception Test (TAT),Rotter Incomplete Sentence Blank (RISB),300,1
+22,"A personality assessment in which a person responds to ambiguo

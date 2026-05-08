@@ -6,6 +6,6 @@ name = "New project"
 script = ""
 
 [[actions]]
-name = "Run"
+name = "Run UI"
 icon = "run"
-command = "powershell -ExecutionPolicy Bypass -File \".\\scripts\\Run.ps1\""
+command = "powershell -ExecutionPolicy Bypass -File \".\\scripts\\Run UI.ps1\""

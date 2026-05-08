@@ -1,0 +1,58 @@
+Which Equation When? – Physics Guide with Worked Examples
+Step 1: Is there a collision?
+Yes → Use momentum (do not use energy during the collision).
+No → Go to kinematics or energy.
+Step 2: No Collision — How is the object moving?
+1D Kinematics
+Equations:
+
+Example: A small cart accelerates from rest at 3 m/s² for 6 s. Find final velocity and distance traveled.
+Solution:
+
+Energy (Sliding Block)
+Equations:
+, 
+Example: A 2 kg block slides down a frictionless ramp from a height of 1.5 m. Find its speed at the bottom.
+Solution:
+
+Step 3: Forces Explicitly Needed (Friction)
+Incline: 
+Example: A 3 kg cart slides on a horizontal surface with μ_k = 0.2. Initial speed 4 m/s. Find acceleration and stopping distance.
+Solution:
+Use  →  → 
+Step 4: Momentum (Collisions)
+1D Momentum
+Inelastic (stick together): 
+Example: 2 kg cart moving at 3 m/s hits 1 kg cart at rest and they stick together.
+Solution:
+
+2D Momentum
+, 
+Components: , 
+Example: 1 kg puck moves east at 3 m/s and collides with 2 kg puck at rest. First puck moves at 1.5 m/s at 30° north of east. Find velocity of second puck.
+Solution:
+x:  → 
+y:  → 
+ south of east
+Step 5: Elastic Collisions
+Check KE: 
+If yes → use momentum and KE
+If no → use momentum only
+Example: Two carts collide on frictionless surface. Compare KE before and after to check if elastic.
+Step 6: Impulse
+Example: 0.25 kg ball hits a wall and rebounds from 4 m/s → -3 m/s in 0.02 s.
+Solution:
+
+Step 7: 2D Motion / Projectiles
+x: 
+y: 
+, 
+Example: Ball launched at 15 m/s, 40° above horizontal. Find flight time, max height, horizontal range.
+Time to peak:  → total time ≈ 1.97 s
+Max height: 
+Horizontal range: 
+Step 8: Reminders
+Draw diagrams
+Choose energy OR momentum, not both (except impulse)
+Track directions carefully
+Check units

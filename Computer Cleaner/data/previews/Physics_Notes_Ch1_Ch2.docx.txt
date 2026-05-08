@@ -1,0 +1,31 @@
+Physics Notes – Chapter 1
+Units & Measurement
+• SI Units: meter (m), kilogram (kg), second (s)
+• Prefixes: milli (10⁻³), centi (10⁻²), kilo (10³)
+• Scalar vs. Vector: Scalars have only magnitude; Vectors have magnitude + direction
+Motion Basics
+• Distance (d): total length traveled (scalar)
+• Displacement (Δx): straight-line change in position (vector)
+• Speed: distance ÷ time (scalar)
+• Velocity (v): displacement ÷ time (vector)
+Acceleration Intro
+• Acceleration (a): rate of change of velocity
+• Formula: a = Δv / Δt = (vf – vi) / t
+• Units: m/s²
+Physics Notes – Chapter 2
+Acceleration Vocabulary
+• Acceleration: change in velocity per unit time
+• Positive acceleration: speeding up in positive direction
+• Negative acceleration (deceleration): slowing down or speeding up in negative direction
+• Uniform acceleration: constant acceleration
+Key Formulas
+• Acceleration: a = Δv / Δt = (vf – vi) / t
+• Final velocity: vf = vi + a·t
+• Displacement: d = vi·t + ½·a·t²
+• Displacement (alternate): d = (vi + vf)/2 · t
+• Squared relation: vf² = vi² + 2·a·d
+General Rules
+• Positive velocity/acceleration = motion to the right/up
+• Negative velocity/acceleration = motion to the left/down
+• If velocity and acceleration have the same sign → object speeds up
+• If velocity and acceleration have opposite signs → object slows down

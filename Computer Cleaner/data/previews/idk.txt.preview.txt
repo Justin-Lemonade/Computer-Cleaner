@@ -1,0 +1,14 @@
+from machine import Pin, PWM
+import time
+
+# Initialize the LED
+led_pin = Pin(0, Pin.OUT)
+led_pwm = PWM(led_pin)
+
+# Gradually increase brightness
+for duty_cycle in range(0, 65535, 1000):
+    led_pwm.duty_cycle(duty_cycle)
+    time.sleep(0.05)  # Adjust the delay as needed for smoother transition
+
+# Turn off the LED
+led_pwm.deinit()

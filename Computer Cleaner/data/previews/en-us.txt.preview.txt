@@ -1,0 +1,87 @@
+// English
+LanguageName:           English
+
+// Settings and Menu
+FpsTutorial:            First Steps into Gaming
+EpisodeSubtitle:	    First Person Shooter
+Settings:               Settings
+Pause:                  Pause
+Back:                   Back
+InvertYAxis:            Invert Y-Axis 
+Volume:                 Volume
+MouseSensitivity:       Mouse Sensitivity
+Quality:                Quality
+en-us:                  English
+Language:               Language
+Quit:                   Quit
+StartGame:              Start Game
+Very Low:               Very Low
+Low:                    Low
+Medium:                 Medium
+High:                   High
+Very High:              Very High
+Ultra:                  Ultra
+Fullscreen:             Fullscreen
+Resolution:             Resolution
+Windowed:               Windowed
+Borderless:             Borderless
+1920x1080:              1920x1080
+Loading:                Loading...
+CloseTextBox:           Close Text Box
+EndGame:                Quit Game
+Credits:                Credits
+
+//CreditsMenu
+LBLCredits:		Credits
+CreditsHeadline:	A game by
+CollaborationHeadline:	In collaboration with
+TranslatorHeadline:     Translation by
+TranslatorCredits:      IndieBurg
+
+// Ingame Overlay always Visible
+
+Interaction:            Actions
+Look:                   Look
+Fire:                   Fire
+Sprint:                 Sprint
+Movement:               Movement
+Interact:               Interact
+Jump:                   Jump
+Crouch:                 Crouch
+
+LookXPositive:          Right
+LookXNegative:          Left
+LookYPositive:          Up
+LookYNegative:          Down
+
+MoveXPositive:          Right
+MoveXNegative:          Left
+MoveYPositive:          Forward
+MoveYNegative:          Backward
+
+//Pop-Ups
+
+PopupWalkForward:       move forward 
+PopupWalkBackward:      move backwards
+PopupWalkLeftRight:     move left / right
+PopupLookUpDown:        look up / down
+PopupLookLeftRight:     look left / right
+
+PopupCrouch:            hold to crouch
+PopupSprint:            hold to sprint
+PopupJump:              jump
+
+PopupInteract:          interact
+PopupFire:              fire
+WinMessageHeadline:	    Congratulations!
+WinMessageText:		    Thank you for playing the game. You successfully finished the game! If you like you can keep practicing your aim or quit the game. 
+WinMessageHeadlineAllTargets:       Congratulations!
+WinMessageTextAllTargets:           Thank you for playing the game. You successfully finished the game!
+
+
+
+//Photosensitive Warning
+
+WarningHeadline:         Photosensitive seizure warning
+WarningText:             A very small percentage of people may experience a seizure when exposed to certain visual images, including flashing lights or patterns that may appear in video games. Even people who have no history of seizures or epilepsy may have an undiagnosed condition that can cause these “photosensitive epileptic seizures” while playing video games.\nImmediately stop playing and consult a doctor if you experience any symptoms.\nThese seizures may have a variety of symptoms, including lightheadedness, altered vision, eye or face twitching, jerking or shaking of arms or legs, disorientation, confusion, or momentary loss of awareness. Seizures may also cause loss of consciousness or convulsions that can lead to injury from falling down or striking nearby objects.\nParents should watch for or ask their children about the above symptoms. Children and teenagers are more likely than adults to experience these seizures.\nYou may reduce risk of photosensitive epileptic seizures by taking the following precautions:\n\n    Play in a well-lit room.\n    Do not play if you are drowsy or fatigued.\n\nIf you or any of your relatives have a history of seizures or epilepsy, consult a doctor before playing video games.
+Skip:                    Skip

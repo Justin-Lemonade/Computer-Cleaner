@@ -1,0 +1,106 @@
+# Complete MCP Servers Guide — GitHub Links & Deep Links
+
+For VS Code + Codex/Claude Web Chat Setup
+
+---
+
+## 🗂️ RECOMMENDED MCPs FOR YOUR PYTHON APP
+
+### Essential for File & Project Management
+
+#### 1. **Filesystem MCP** — Read/Write/Move Files
+- **GitHub (Official):** https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
+- **Deep Link to README:** https://github.com/modelcontextprotocol/servers/blob/main/src/filesystem/README.md
+- **NPM Package:** `@modelcontextprotocol/server-filesystem`
+- **Best For:** AI managing your code files, creating new modules, organizing project structure
+- **Quick Install:**
+  ```bash
+  npx -y @modelcontextprotocol/server-filesystem /path/to/your/project
+  ```
+
+---
+
+#### 2. **Git MCP** — Read Git History, Diffs, Commits
+- **GitHub (Official):** https://github.com/modelcontextprotocol/servers/tree/main/src/git
+- **Deep Link to README:** https://github.com/modelcontextprotocol/servers/blob/main/src/git/README.md
+- **Install Methods:**
+  - **Via uvx:** `uvx mcp-server-git --repository /path/to/repo`
+  - **Via pip:** `pip install mcp-server-git` then `python -m mcp_server_git`
+- **Best For:** AI understanding your project history, seeing what you changed, analyzing diffs
+- **VS Code Config:**
+  ```json
+  {
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git", "--repository", "/path/to/your/project"]
+    }
+  }
+  ```
+
+---
+
+### Database & Data Layer
+
+#### 3. **SQLite MCP** — Query & Manage SQLite Databases
+- **GitHub (Main Repo):** https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite
+- **Deep Link to README:** https://github.com/modelcontextprotocol/servers/blob/main/src/sqlite/README.md
+- **Alternative (Archived but still works):** https://github.com/modelcontextprotocol/servers-archived/tree/main/src/sqlite
+- **Install via uv:**
+  ```bash
+  uvx mcp-server-sqlite --db-path /path/to/your/database.db
+  ```
+- **Best For:** AI querying your database, creating tables, running analytics
+- **Note:** Requires Python 3.10+. If you have 3.9, use the archived version or an alternative
+- **Alternative SQLite Servers:**
+  - https://github.com/jparkerweb/mcp-sqlite (good community option)
+  - https://github.com/hannesrudolph/sqlite-explorer-fastmcp-mcp-server (read-only, safe for demos)
+
+---
+
+### Problem-Solving & Architecture
+
+#### 4. **Sequential Thinking MCP** — AI Plans Tasks Step-by-Step
+- **GitHub (Official):** https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking
+- **Deep Link to README:** https://github.com/modelcontextprotocol/servers/blob/main/src/sequentialthinking/README.md
+- **NPM Package:** `@modelcontextprotocol/server-sequential-thinking`
+- **Quick Install:**
+  ```bash
+  npx -y @modelcontextprotocol/server-sequential-thinking
+  ```
+- **Best For:** Complex coding tasks, architecture decisions, debugging multi-step problems
+- **What it does:** Makes AI think through problems before coding (less hallucinations, better results)
+- **VS Code Config:**
+  ```json
+  {
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    }
+  }
+  ```
+
+---
+
+### GitHub Integration
+
+#### 5. **GitHub MCP** — Interact with GitHub API
+- **GitHub (Official):** https://github.com/modelcontextprotocol/servers (check main servers repo)
+- **NPM Package:** `@modelcontextprotocol/server-github`
+- **NPM Page:** https://www.npmjs.com/package/@modelcontextprotocol/server-github
+- **Quick Install:**
+  ```bash
+  npx -y @modelcontextprotocol/server-github
+  ```
+- **Setup:** You need a GitHub Personal Access Token (PAT)
+  1. Go to https://github.com/settings/tokens
+  2. Click "Generate new token (classic)"
+  3. Enable: `repo`, `read:user`, `workflow` scopes
+  4. Copy the token
+  5. Set env var: `export GITHUB_PERSONAL_ACCESS_TOKEN=your_token_here`
+- **Best For:** AI pushing code, creating branches, managing PRs
+- **VS Code Config:**
+  ```json
+  {
+    "github": {
+      "command": "npx",
+      "ar

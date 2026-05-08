@@ -1,0 +1,127 @@
+{
+  "formatVersion": 3,
+  "id": "root",
+  "ideas": {
+    "2": {
+      "title": "Hobby",
+      "id": 9,
+      "ideas": {
+        "1": {
+          "title": "Business\n\nSaving Rich People Time",
+          "id": 2,
+          "attr": {
+            "position": [
+              49,
+              -115.99999237060547,
+              1
+            ],
+            "style": {
+              "fontMultiplier": 1.25
+            },
+            "parentConnector": {
+              "lineStyle": "dashed"
+            }
+          },
+          "ideas": {
+            "1": {
+              "title": "Mobile Car Wash",
+              "id": 4,
+              "ideas": {
+                "1": {
+                  "title": "Client Base with",
+                  "id": 5,
+                  "ideas": {
+                    "1": {
+                      "title": "Not enough time",
+                      "id": 6
+                    },
+                    "2": {
+                      "title": "A car that needs cleaning",
+                      "id": 7
+                    },
+                    "4": {
+                      "title": "Willing to pay a premium",
+                      "id": 11
+                    }
+                  },
+                  "attr": {
+                    "position": [
+                      118.99999237060547,
+                      -134,
+                      1
+                    ]
+                  }
+                },
+                "2": {
+                  "title": "Team",
+                  "id": 13,
+                  "attr": {},
+                  "ideas": {
+                    "1": {
+                      "title": "Cleaners",
+                      "id": 16
+                    },
+                    "2": {
+                      "title": "Manager",
+                      "id": 18,
+                      "ideas": {}
+                    },
+                    "3": {
+                      "title": "Assistant",
+                      "id": 20
+                    }
+                  }
+                },
+                "3": {
+                  "title": "Website",
+                  "id": 14,
+                  "ideas": {
+                    "1": {
+                      "title": "Will be used to funnel ads to",
+                      "id": 15
+                    }
+                  },
+                  "attr": {
+                    "position": [
+                      135.99999237060547,
+                      142,
+                      2
+                    ]
+                  }
+                },
+                "4": {
+                  "title": "Merchandising",
+                  "id": 21,
+                  "ideas": {
+                    "1": {
+                      "title": "Selling T-Shirts",
+                      "id": 25
+                    },
+                    "2": {
+                      "title": "Selling Caps",
+                      "id": 26
+                    },
+                    "4": {
+                      "title": "Selling any car accessories",
+                      "id": 29,
+                      "ideas": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "attr": {
+        "position": [
+          -931,
+          -115,
+          1
+        ]
+      }
+    }
+  },
+  "title": "Hobby",
+  "links": []
+}

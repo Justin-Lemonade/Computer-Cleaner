@@ -1,0 +1,107 @@
+"Blooket
+Import Template",,,,,,,
+Question #,Question Text,Answer 1,Answer 2,"Answer 3
+(Optional)","Answer 4
+(Optional)","Time Limit (sec)
+(Max: 300 seconds)","Correct Answer(s)
+(Only include Answer #)"
+1,Need for ________ refers to maintaining positive relationships with others.,achievement,affiliation,intimacy,power,300,2
+2,________ proposed the hierarchy of needs.,William James,David McClelland,Abraham Maslow,Albert Bandura,300,3
+3,________ is an individual’s belief in her capability to complete some task.,physiological needs,self-esteem,self-actualization,self-efficacy,300,4
+4,Carl mows the yard of his elderly neighbor each week for $20. What type of motivation is this?,extrinsic,intrinsic,drive,biological,300,1
+5,Nearly ________ of the adult population in the United States can be classified as obese.,one half,one third,one fourth,one fifth,300,2
+6,________ is a chemical messenger secreted by fat cells that acts as an appetite suppressant.,orexin,angiotensin,leptin,ghrelin,300,3
+7,________ is characterized by episodes of binge eating followed by attempts to compensate for the food consumed.,Prader-Willi syndrome,morbid obesity,anorexia nervosa,bulimia nervosa,300,4
+8,"In order to be classified as morbidly obese, an adult must have a BMI of ________.",less than 25,25–29.9,30–39.9,40 or more,300,4
+9,Animal research suggests that in male rats the ________ is critical for engaging in sexual behavior.,nucleus accumbens,amygdala,medial preoptic area of hypothalamus,hippocampus,300,3
+10,"During the ________ phase of the sexual response cycle, individuals experience rhythmic contractions and ejaculation.",excitement,plateau,orgasm,resolution,300,3
+11,Which of the following findings was not a result of the Kinsey study?,Sexual desire and ability can be separate,Females enjoy sex,Same-gender acts common,Masturbation has no consequences,300,1
+12,"If someone is uncomfortable identifying with the gender associated with their birth sex, they could have ________.",homosexuality,bisexuality,gender expression,gender dysphoria,300,4
+13,Individuals suffering from PTSD have been shown to have reduced volumes of the ________.,amygdala,hippocampus,hypothalamus,thalamus,300,2
+14,"According to the ________ theory of emotion, emotional experiences arise from physiological arousal.",James-Lange,Cannon-Bard,Schachter-Singer two-factor,Darwinian,300,1
+15,Which of the following is not one of the seven universal emotions described in this chapter?,contempt,disgust,melancholy,anger,300,3
+16,Which theory of emotion suggests polygraphs should be accurate at differentiating emotions?,Cannon-Bard,James-Lange,Schachter-Singer two-factor,Darwinian,300,2
+17,,,,,,,
+18,,,,,,,
+19,,,,,,,
+20,,,,,,,
+21,,,,,,,
+22,,,,,,,
+23,,,,,,,
+24,,,,,,,
+25,,,,,,,
+26,,,,,,,
+27,,,,,,,
+28,,,,,,,
+29,,,,,,,
+30,,,,,,,
+31,,,,,,,
+32,,,,,,,
+33,,,,,,,
+34,,,,,,,
+35,,,,,,,
+36,,,,,,,
+37,,,,,,,
+38,,,,,,,
+39,,,,,,,
+40,,,,,,,
+41,,,,,,,
+42,,,,,,,
+43,,,,,,,
+44,,,,,,,
+45,,,,,,,
+46,,,,,,,
+47,,,,,,,
+48,,,,,,,
+49,,,,,,,
+50,,,,,,,
+51,,,,,,,
+52,,,,,,,
+53,,,,,,,
+54,,,,,,,
+55,,,,,,,
+56,,,,,,,
+57,,,,,,,
+58,,,,,,,
+59,,,,,,,
+60,,,,,,,
+61,,,,,,,
+62,,,,,,,
+63,,,,,,,
+64,,,,,,,
+65,,,,,,,
+66,,,,,,,
+67,,,,,,,
+68,,,,,,,
+69,,,,,,,
+70,,,,,,,
+71,,,,,,,
+72,,,,,,,
+73,,,,,,,
+74,,,,,,,
+75,,,,,,,
+76,,,,,,,
+77,,,,,,,
+78,,,,,,,
+79,,,,,,,
+80,,,,,,,
+81,,,,,,,
+82,,,,,,,
+83,,,,,,,
+84,,,,,,,
+85,,,,,,,
+86,,,,,,,
+87,,,,,,,
+88,,,,,,,
+89,,,,,,,
+90,,,,,,,
+91,,,,,,,
+92,,,,,,,
+93,,,,,,,
+94,,,,,,,
+95,,,,,,,
+96,,,,,,,
+97,,,,,,,
+98,,,,,,,
+99,,,,,,,
+100,,,,,,,

@@ -1,0 +1,37 @@
+SRA HIGH SCHOOL PHYSICS PROBLEMS: GRAVITY AND ORBITS
+Newton’s Law of Gravitation
+Two planets, A and B, have masses of 6.0 × 10^24 kg and 4.0 × 10^24 kg, respectively. They are 2.0 × 10^7 m apart.
+Calculate the gravitational force between them.
+If the distance doubles, what happens to the force?
+Newton’s Law of Gravitation (Conceptual)
+Explain why astronauts feel “weightless” in the International Space Station even though gravity is still acting on them.
+Orbital Motion
+A satellite orbits Earth at an altitude of 500 km. Earth’s radius: 6.37 × 10^6 m
+Earth’s mass: 5.97 × 10^24 kg
+Calculate the orbital velocity of the satellite.
+Find the time it takes to complete one orbit.
+Orbital Motion (Multi-step)
+A spacecraft orbits a planet of mass 8 × 10^23 kg at a distance of 1.0 × 10^7 m from the center.
+Determine the gravitational force acting on a 1000 kg spacecraft.
+Find the orbital speed.
+Calculate the orbital period.
+Kepler’s Laws
+Planet X has an orbital period of 2 Earth years around its star and an average distance of 2 AU. Planet Y has an orbital period of 8 Earth years. 1 AU is the average distance from Earth to Sun=1.496x1011
+Using Kepler’s Third Law, estimate the average distance of Planet Y from its star.
+Kepler’s Laws (Conceptual)
+Describe Kepler’s Second Law (“law of equal areas”) and explain how it a_ects the speed of a planet at di_erent points in its orbit.
+Einstein’s Theory of Gravity
+The orbit of Mercury shows a slight deviation from predictions based on Newtonian gravity. Explain qualitatively how Einstein’s theory of general relativity accounts for this deviation. (The book doesn’t explain. Look it up!)
+Einstein’s Theory of Gravity (Conceptual)
+A massive star causes light from a distant star to bend as it passes near the star.
+Name the e_ect predicted by Einstein’s theory.
+Explain why Newtonian gravity cannot account for this phenomenon. (The book doesn’t explain. Look it up!)
+Astronomy Challenge (Multi-step Problem)
+A newly discovered exoplanet, Planet Z, orbits a star similar to the Sun. Scientists want to study its orbit and gravity.
+Given:
+Mass of the star: 2.0 × 10^30 kg Mass of Planet Z: 6.0 × 10^24 kg Average orbital radius: 1.5 × 10^11 m
+Calculate the gravitational force between Planet Z and its star.
+Determine the orbital speed of Planet Z.
+Calculate the time Planet Z takes to complete one orbit in Earth years.
+Using Kepler’s Third Law, compare the orbital period of Planet Z with Earth’s period and comment on the result.
+If Planet Z’s orbit was very close to a massive star (like Mercury to the Sun), explain why Newtonian gravity might slightly fail to predict the orbit accurately.

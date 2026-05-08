@@ -1,0 +1,37 @@
+SRA Physics Circular Motion Worksheet
+Swinging Ball
+A 0.20 kg yo-yo is swung in a horizontal circle on a string of length 1.0 m. It makes 3 revolutions every second.
+Find the angular velocity.
+Find the linear speed.
+Find the tension in the string.
+Hamster Racetrack
+A 0.15 kg hamster runs around a circular track of radius 0.50 m. If its maximum static friction with the track is 1.2 N, what’s the maximum speed the hamster can run without skidding?
+UFO Ride
+Aliens strap you (80kg) into a rotating spaceship with radius 2.5 m. The walls press you inward with a normal force of 400 N.
+What’s your linear velocity?
+What is the centripetal acceleration?
+Merry-Go-Splat
+A merry-go-round has a radius of 3.0 m. A child of mass 30 kg sits on the edge. If it spins once every 4.0 s:
+Find the child’s speed.
+Find the centripetal force required.
+If the child isn’t holding on, which force actually provides the centripetal force?
+Donut on a String
+A fresh 0.10 kg donut is tied to a string and swung in a vertical circle of radius 0.75 m.
+What minimum speed must it have at the top to avoid falling?
+What is the tension in the string at the bottom if the speed there is twice the minimum speed?
+Pig on a Carousel
+A 50 kg pig sits on a carousel with a 5.0 m radius. The floor is frictionless, so the pig slides unless a rope provides the centripetal force. If the carousel spins at 2.0 rad/s, what tension is in the rope?
+Bucket of Water Trick
+A bucket of water with mass 2.0 kg is swung in a vertical circle of radius 1.2 m.
+What minimum speed at the top keeps the water from falling out?
+At the bottom, if the speed is 6.0 m/s, what is the normal force of the bucket on the water?
+Pizza Delivery Turn
+A pizza delivery scooter (150 kg including driver) goes around a flat circular turn of radius 20 m. If the maximum static friction is 1200 N, what is the maximum safe speed to avoid sliding (and dropping the pizza)?
+G. Banana Blender
+Bananas are spun in a blender at a radius of 0.10 m. If they experience a centripetal acceleration of 200 m/s², what is their speed and the blender’s angular velocity?
+10. Upside-Down Astronaut
+In a training ride, an astronaut is spun in a vertical loop of radius 8.0 m.
+What is the minimum speed at the top of the loop to avoid falling?
+At twice that speed at the bottom, what is the normal force compared to the astronaut’s weight?
+11. Challenge: Car on a Curve
+A car of mass 1200 kg drives around a circular curve of radius 50 m. The coefficient of static friction between the tires and the road is μs = 0.40. What is the maximum speeds the car can have without slipping.

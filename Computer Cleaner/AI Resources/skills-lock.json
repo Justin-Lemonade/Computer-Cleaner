@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "skills": {
+    "app-architecture": {
+      "source": "smithery.ai",
+      "sourceType": "well-known",
+      "computedHash": "b6078dcbdd16c6c35b7b2fc65b397620cf61d1cfdc4ce7746aad06d4ad905c9a"
+    },
+    "chatgpt-apps": {
+      "source": "smithery.ai",
+      "sourceType": "well-known",
+      "computedHash": "421bf8d939ca04beb23ffb20b01084fb875cae663233c39dfd996e851fc73994"
+    },
+    "frontend-agent": {
+      "source": "smithery.ai",
+      "sourceType": "well-known",
+      "computedHash": "4a22e684293af8e2e1130222dd8a49d06a114889646374b614d73a317d831efa"
+    },
+    "frontend-design": {
+      "source": "smithery.ai",
+      "sourceType": "well-known",
+      "computedHash": "3033a2783a6ba7054800c7b45614fcdf44d6ab4d3c1ba53d8f6034bd92bd8016"
+    },
+    "mcp-brave-search": {
+      "source": "smithery.ai",
+      "sourceType": "well-known",
+      "computedHash": "242c4621379aa14e4f7becd662d0df02c32b236946cc400922f342c6043a4135"
+    }
+  }
+}

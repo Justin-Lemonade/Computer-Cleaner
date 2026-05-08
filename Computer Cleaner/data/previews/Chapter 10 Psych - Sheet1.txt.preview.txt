@@ -1,0 +1,17 @@
+Question #,Question,Options,Correct Answer
+1,Need for ________ refers to maintaining positive relationships with others.,"A. achievement, B. affiliation, C. intimacy, D. power",B. affiliation
+2,________ proposed the hierarchy of needs.,"A. William James, B. David McClelland, C. Abraham Maslow, D. Albert Bandura",C. Abraham Maslow
+3,________ is an individual’s belief in her capability to complete some task.,"A. physiological needs, B. self-esteem, C. self-actualization, D. self-efficacy",D. self-efficacy
+4,Carl mows the yard of his elderly neighbor each week for $20. What type of motivation is this?,"A. extrinsic, B. intrinsic, C. drive, D. biological",A. extrinsic
+5,"According to your reading, nearly ________ of the adult population in the United States can be classified as obese.","A. one half, B. one third, C. one fourth, D. one fifth",B. one third
+6,________ is a chemical messenger secreted by fat cells that acts as an appetite suppressant.,"A. orexin, B. angiotensin, C. leptin, D. ghrelin",C. leptin
+7,________ is characterized by episodes of binge eating followed by attempts to compensate for the food consumed.,"A. Prader-Willi syndrome, B. morbid obesity, C. anorexia nervosa, D. bulimia nervosa",D. bulimia nervosa
+8,"In order to be classified as morbidly obese, an adult must have a BMI of ________.","A. less than 25, B. 25–29.9, C. 30–39.9, D. 40 or more",D. 40 or more
+9,Animal research suggests that in male rats the ________ is critical for the ability to engage in sexual behavior.,"A. nucleus accumbens, B. amygdala, C. medial preoptic area of the hypothalamus, D. hippocampus",C. medial preoptic area of hypothalamus
+10,"During the ________ phase of the sexual response cycle, individuals experience rhythmic contractions and ejaculation.","A. excitement, B. plateau, C. orgasm, D. resolution",C. orgasm
+11,Which of the following findings was not a result of the Kinsey study?,"A. Sexual desire and ability can be separate, B. Females enjoy sex, C. Same-gender acts common, D. Masturbation has no consequences",A. Sexual desire and ability can be separate
+12,"If someone is uncomfortable identifying with the gender associated with their birth sex, they could have ________.","A. homosexuality, B. bisexuality, C. gender expression, D. gender dysphoria",D. gender dysphoria
+13,Individuals suffering from PTSD have been shown to have reduced volumes of the ________.,"A. amygdala, B. hippocampus, C. hypothalamus, D. thalamus",B. hippocampus
+14,"According to the ________ theory of emotion, emotional experiences arise from physiological arousal.","A. James-Lange, B. Cannon-Bard, C. Schachter-Singer two-factor, D. Darwinian",A. James-Lange
+15,Which of the following is not one of the seven universal emotions described in this chapter?,"A. contempt, B. disgust, C. melancholy, D. anger",C. melancholy
+16,Which theory of emotion suggests polygraphs should be accurate at differentiating emotions?,"A. Cannon-Bard, B. James-Lange, C. Schachter-Singer two-factor, D. Darwinian",B. James-Lange

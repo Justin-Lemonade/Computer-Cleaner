@@ -1,0 +1,87 @@
+﻿// Italiano
+LanguageName:           Italiano
+
+// Settings and Menu
+FpsTutorial:            I primi passi nei videogiochi
+EpisodeSubtitle:	Sparatutto in prima persona
+Settings:               Impostazioni
+Pause:                  Pausa
+Back:                   Ritorna
+InvertYAxis:            Invertire Asse Y
+Volume:                 Volume
+MouseSensitivity:       Sensibilità del Mouse
+Quality:                Qualità
+it-it:                  Italiano
+Language:               Lingua
+Quit:                   Esci
+StartGame:              Inizia il Gioco
+Very Low:               Molto Bassa
+Low:                    Bassa
+Medium:                 Media
+High:                   Alto
+Very High:              Molto Alta
+Ultra:                  Ultra
+Fullscreen:             Schermo intero
+Resolution:             Risoluzione dello Schermo
+Windowed:               Finestra
+Borderless:             Senza bordi 
+1920x1080:              1920x1080
+Loading:                Attendere...
+CloseTextBox:           Chiudere casella di testo
+EndGame:                Esci dal Videogioco
+Credits:                Credits
+
+//CreditsMenu
+LBLCredits:		Credits
+CreditsHeadline:	Un Gioco di
+CollaborationHeadline:	In Collaborazione con
+TranslatorHeadline:     Tradotto da
+TranslatorCredits:      Marco Serrao
+
+// Ingame Overlay always Visible
+
+Interaction:            Azioni
+Look:                   Guardare intorno
+Fire:                   Sparare
+Sprint:                 Correre
+Movement:               Movimento
+Interact:               Interagire
+Jump:                   Saltare
+Crouch:                 Inginocchiare
+
+LookXPositive:          Destra
+LookXNegative:          Sinistra
+LookYPositive:          Alto
+LookYNegative:          Basso
+
+MoveXPositive:          Destra
+MoveXNegative:          Sinistra
+MoveYPositive:          Avanti
+MoveYNegative:          Indietro
+
+//Pop-Ups
+
+PopupWalkForward:       camminare avanti 
+PopupWalkBackward:      camminare indietro
+PopupWalkLeftRight:     camminare a sinistra / destra
+PopupLookUpDown:        guardare in alto / basso
+PopupLookLeftRight:     guardare a sinistra / destra
+
+PopupCrouch:            Tenere premuto per Inginocchiare
+PopupSprint:            Tenere premuto per Correre
+PopupJump:              Saltare
+
+PopupInteract:          Usare
+PopupFire:              Sparare
+WinMessageHeadline:	    Congratulazione!
+WinMessageText:		    Grazie per giocare il Gioco. Hai finito con successo il gioco! Se lo desideri, puoi continuare con esercizi di mira o uscire dal gioco.
+WinMessageHeadlineAllTargets:       Congratulazione!
+WinMessageTextAllTargets:           Grazie per giocare il Gioco. Hai finito con successo il gioco!
+
+
+
+//Photosensitive Warning
+
+WarningHeadline:         Photosensitive seizure warning
+WarningText:             A very small percentage of people may experience a seizure when exposed to certain visual images, including flashing lights or patterns that may appear in video games. Even people who have no history of seizures or epilepsy may have an undiagnosed condition that can cause these “photosensitive epileptic seizures” while playing video games.\nImmediately stop playing and consult a doctor if you experience any symptoms.\nThese seizures may have a variety of symptoms, including lightheadedness, altered vision, eye or face twitching, jerking or shaking of arms or legs, disorientation, confusion, or momentary loss of awareness. Seizures may also cause loss of consciousness or convulsions that can lead to injury from falling down or striking nearby objects.\nParents should watch for or ask their children about the above symptoms. Children and teenagers are more likely than adults to experience these seizures.\nYou may reduce risk of photosensitive epileptic seizures by taking the following precautions:\n\n      Play in a well-lit room.\n    Do not play if you are drowsy or fatigued.\n\nIf you or any of your relatives have a history of seizures or epilepsy, consult a doctor before playing video games.
+Skip:                    Salt

@@ -1,0 +1,111 @@
+solid lamborghini_toy
+  facet normal -0.000000e+00 0.000000e+00 1.000000e+00
+    outer loop
+      vertex 0.000000e+00 -1.750000e+01 0.000000e+00
+      vertex 4.000000e+01 -3.150000e+01 0.000000e+00
+      vertex 4.000000e+01 3.150000e+01 0.000000e+00
+    endloop
+  endfacet
+  facet normal 0.000000e+00 0.000000e+00 1.000000e+00
+    outer loop
+      vertex 0.000000e+00 -1.750000e+01 0.000000e+00
+      vertex 4.000000e+01 3.150000e+01 0.000000e+00
+      vertex 0.000000e+00 1.750000e+01 0.000000e+00
+    endloop
+  endfacet
+  facet normal 3.185019e-01 -9.100053e-01 -2.654182e-01
+    outer loop
+      vertex 0.000000e+00 1.750000e+01 0.000000e+00
+      vertex 4.000000e+01 3.150000e+01 0.000000e+00
+      vertex 6.000000e+01 3.150000e+01 2.400000e+01
+    endloop
+  endfacet
+  facet normal 4.074236e-01 -6.547879e-01 -6.365994e-01
+    outer loop
+      vertex 0.000000e+00 1.750000e+01 0.000000e+00
+      vertex 6.000000e+01 3.150000e+01 2.400000e+01
+      vertex 1.000000e+01 1.400000e+01 1.000000e+01
+    endloop
+  endfacet
+  facet normal 2.696299e-01 0.000000e+00 -9.629640e-01
+    outer loop
+      vertex 1.000000e+01 1.400000e+01 1.000000e+01
+      vertex 6.000000e+01 3.150000e+01 2.400000e+01
+      vertex 6.000000e+01 -3.150000e+01 2.400000e+01
+    endloop
+  endfacet
+  facet normal 2.696299e-01 0.000000e+00 -9.629640e-01
+    outer loop
+      vertex 1.000000e+01 1.400000e+01 1.000000e+01
+      vertex 6.000000e+01 -3.150000e+01 2.400000e+01
+      vertex 1.000000e+01 -1.400000e+01 1.000000e+01
+    endloop
+  endfacet
+  facet normal 3.924548e-01 8.596629e-01 -3.270457e-01
+    outer loop
+      vertex 1.000000e+01 -1.400000e+01 1.000000e+01
+      vertex 6.000000e+01 -3.150000e+01 2.400000e+01
+      vertex 4.000000e+01 -3.150000e+01 0.000000e+00
+    endloop
+  endfacet
+  facet normal 2.756247e-01 7.874992e-01 -5.512495e-01
+    outer loop
+      vertex 1.000000e+01 -1.400000e+01 1.000000e+01
+      vertex 4.000000e+01 -3.150000e+01 0.000000e+00
+      vertex 0.000000e+00 -1.750000e+01 0.000000e+00
+    endloop
+  endfacet
+  facet normal -0.000000e+00 0.000000e+00 1.000000e+00
+    outer loop
+      vertex 4.000000e+01 -3.150000e+01 0.000000e+00
+      vertex 1.000000e+02 -3.360000e+01 0.000000e+00
+      vertex 1.000000e+02 3.360000e+01 0.000000e+00
+    endloop
+  endfacet
+  facet normal 0.000000e+00 0.000000e+00 1.000000e+00
+    outer loop
+      vertex 4.000000e+01 -3.150000e+01 0.000000e+00
+      vertex 1.000000e+02 3.360000e+01 0.000000e+00
+      vertex 4.000000e+01 3.150000e+01 0.000000e+00
+    endloop
+  endfacet
+  facet normal 3.496767e-02 -9.990763e-01 -2.497691e-02
+    outer loop
+      vertex 4.000000e+01 3.150000e+01 0.000000e+00
+      vertex 1.000000e+02 3.360000e+01 0.000000e+00
+      vertex 1.200000e+02 3.360000e+01 2.800000e+01
+    endloop
+  endfacet
+  facet normal 3.701578e-02 -9.988385e-01 -3.084648e-02
+    outer loop
+      vertex 4.000000e+01 3.150000e+01 0.000000e+00
+      vertex 1.200000e+02 3.360000e+01 2.800000e+01
+      vertex 6.000000e+01 3.150000e+01 2.400000e+01
+    endloop
+  endfacet
+  facet normal 6.651901e-02 0.000000e+00 -9.977852e-01
+    outer loop
+      vertex 6.000000e+01 3.150000e+01 2.400000e+01
+      vertex 1.200000e+02 3.360000e+01 2.800000e+01
+      vertex 1.200000e+02 -3.360000e+01 2.800000e+01
+    endloop
+  endfacet
+  facet normal 6.651901e-02 0.000000e+00 -9.977852e-01
+    outer loop
+      vertex 6.000000e+01 3.150000e+01 2.400000e+01
+      vertex 1.200000e+02 -3.360000e+01 2.800000e+01
+      vertex 6.000000e+01 -3.150000e+01 2.400000e+01
+    endloop
+  endfacet
+  facet normal 3.671258e-02 9.989817e-01 -2.622327e-02
+    outer loop
+      vertex 6.000000e+01 -3.150000e+01 2.400000e+01
+      vertex 1.200000e+02 -3.360000e+01 2.800000e+01
+      vertex 1.000000e+02 -3.360000e+01 0.000000e+00
+    endloop
+  endfacet
+  facet normal 3.496373e-02 9.989638e-01 -2.913644e-02
+    outer loop
+      vertex 6.000000e+01 -3.150000e+01 2.400000e+01
+      vertex 1.000000e+02 -3.360000e+01 0.000000e+00
+      vertex 4.000000e+01 -3.150000e+01 0.00

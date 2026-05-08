@@ -1,0 +1,92 @@
+{
+  "mcp": {
+    "inputs": [
+      {
+        "type": "promptString",
+        "id": "db_path",
+        "description": "SQLite database path",
+        "default": "${workspaceFolder}/files.db"
+      },
+      {
+        "type": "promptString",
+        "id": "github_pat",
+        "description": "GitHub personal access token"
+      },
+      {
+        "type": "promptString",
+        "id": "brave_api_key",
+        "description": "Brave Search API key",
+        "password": true
+      }
+    ],
+    "servers": {
+      "filesystem": {
+        "command": "cmd",
+        "args": [
+          "/c",
+          "npx",
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "${workspaceFolder}"
+        ]
+      },
+      "git": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-git",
+          "--repository",
+          "${workspaceFolder}"
+        ]
+      },
+      "sqlite": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-sqlite",
+          "--db-path",
+          "${input:db_path}"
+        ]
+      },
+      "sequential-thinking": {
+        "command": "cmd",
+        "args": [
+          "/c",
+          "npx",
+          "-y",
+          "@modelcontextprotocol/server-sequential-thinking"
+        ]
+      },
+      "fetch": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-fetch"
+        ]
+      },
+      "github": {
+        "command": "cmd",
+        "args": [
+          "/c",
+          "npx",
+          "-y",
+          "@modelcontextprotocol/server-github"
+        ],
+        "env": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "${input:github_pat}"
+        }
+      },
+      "brave-search": {
+        "command": "cmd",
+        "args": [
+          "/c",
+          "npx",
+          "-y",
+          "@brave/brave-search-mcp-server",
+          "--transport",
+          "stdio"
+        ],
+        "env": {
+          "BRAVE_API_KEY": "${input:brave_api_key}"
+        }
+      }
+    }
+  }
+}

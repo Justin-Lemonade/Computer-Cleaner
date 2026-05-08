@@ -1,0 +1,87 @@
+// Deutsch
+LanguageName:           Français
+
+// Settings and Menu
+FpsTutorial:            First Steps into Gaming
+EpisodeSubtitle:	    First Person Shooter
+Pause:                  Pause
+Settings:               Paramètres
+
+Back:                   Retour
+InvertYAxis:            Inverser l'axe Y
+Volume:                 Volume
+MouseSensitivity:       Sensibilité de la souris
+Quality:                Qualité
+Language:               Langue
+Quit:                   Quitter
+StartGame:              Démarrer le jeu
+fr-fr:                  Français
+Very Low:               très basse
+Low:                    basse
+Medium:                 moyenne
+High:                   haute
+Very High:              très haute
+Ultra:                  ultra
+Resolution:             Résolution
+Fullscreen:             Plein écran
+Windowed:               Fenêtre
+Borderless:             Sans bordure
+1920x1080:              1920x1080
+Loading:                Chargement...
+CloseTextBox:           Fermer la zone de texte
+EndGame:                Quitter le jeu
+Credits:                Crédits
+
+//CreditsMenu
+LBLCredits:		Crédits
+CreditsHeadline:	Un jeu de
+CollaborationHeadline:	En coopération avec
+TranslatorHeadline:     Traduit par
+TranslatorCredits:      Maurice Appel
+
+// Ingame Overlay always Visible
+
+Interaction:            actions
+Look:                   regarder
+Fire:                   tirer
+Sprint:                 sprinter
+Movement:               mouvement
+Interact:               utiliser
+Jump:                   sauter
+Crouch:                 accroupir
+
+LookXPositive:          droite
+LookXNegative:          gauche
+LookYPositive:          haut
+LookYNegative:          bas
+
+MoveXPositive:          droite
+MoveXNegative:          gauche
+MoveYPositive:          avancer
+MoveYNegative:          reculer
+
+//Pop-Ups
+
+PopupWalkForward:       avancer 
+PopupWalkBackward:      reculer
+PopupWalkLeftRight:     marcher vers la gauche / droite
+PopupLookUpDown:        regarder vers le haut / bas
+PopupLookLeftRight:     regarder vers la gauche / droite
+
+PopupCrouch:            maintenir pour s'accroupir
+PopupSprint:            maintenir pour sprinter
+PopupJump:              sauter
+
+PopupInteract:          utiliser
+PopupFire:              tirer
+WinMessageHeadline:	    Félicitation!
+WinMessageText:		    Merci d'avoir joué. Vous avez terminé le jeu avec succès! Vous pouvez faire d'autres exercices de tire ou quitter l'application. 
+WinMessageHeadlineAllTargets:       Félicitation!
+WinMessageTextAllTargets:           Merci d'avoir joué. Vous avez terminé le jeu avec succès!
+
+//Photosensitive Warning
+
+
+WarningHeadline:         Photosensitive seizure warning
+WarningText:             A very small percentage of people may experience a seizure when exposed to certain visual images, including flashing lights or patterns that may appear in video games. Even people who have no history of seizures or epilepsy may have an undiagnosed condition that can cause these “photosensitive epileptic seizures” while playing video games.\nImmediately stop playing and consult a doctor if you experience any symptoms.\nThese seizures may have a variety of symptoms, including lightheadedness, altered vision, eye or face twitching, jerking or shaking of arms or legs, disorientation, confusion, or momentary loss of awareness. Seizures may also cause loss of consciousness or convulsions that can lead to injury from falling down or striking nearby objects.\nParents should watch for or ask their children about the above symptoms. Children and teenagers are more likely than adults to experience these seizures.\nYou may reduce risk of photosensitive epileptic seizures by taking the following precautions:\n\n    Play in a well-lit room.\n    Do not play if you are drowsy or fatigued.\n\nIf you or any of your relatives have a history of seizures or epilepsy, consult a doctor before playing video games.
+Skip:                    passer
