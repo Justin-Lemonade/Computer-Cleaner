@@ -32,10 +32,31 @@ def init_db() -> None:
                 size INTEGER,
                 created_date TEXT,
                 modified_date TEXT,
-                preview_path TEXT
+                preview_path TEXT,
+                file_hash TEXT,
+                already_sorted INTEGER NOT NULL DEFAULT 0,
+                preview_generated INTEGER NOT NULL DEFAULT 0,
+                last_seen_path TEXT,
+                last_modified TEXT,
+                times_seen INTEGER NOT NULL DEFAULT 0
             );
             """
         )
+        existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(files);").fetchall()}
+        if "file_hash" not in existing_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN file_hash TEXT;")
+        if "already_sorted" not in existing_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN already_sorted INTEGER NOT NULL DEFAULT 0;")
+        if "preview_generated" not in existing_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN preview_generated INTEGER NOT NULL DEFAULT 0;")
+        if "last_seen_path" not in existing_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN last_seen_path TEXT;")
+        if "last_modified" not in existing_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN last_modified TEXT;")
+        if "times_seen" not in existing_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN times_seen INTEGER NOT NULL DEFAULT 0;")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_files_file_hash ON files(file_hash);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_files_already_sorted ON files(already_sorted);")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS labels (
@@ -94,6 +115,37 @@ def upsert_file(metadata: dict[str, Any]) -> int:
         )
         row = conn.execute("SELECT id FROM files WHERE path = ?;", (str(metadata["path"]),)).fetchone()
         return int(row["id"])
+
+
+def find_file_by_hash(file_hash: str) -> sqlite3.Row | None:
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM files WHERE file_hash = ? ORDER BY already_sorted DESC, id DESC LIMIT 1;",
+            (file_hash,),
+        ).fetchone()
+
+
+def mark_file_seen(*, file_id: int, path: str, modified_date: datetime | None, preview_path: str | None, file_hash: str | None) -> None:
+    modified_str = modified_date.isoformat() if isinstance(modified_date, datetime) else None
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE files
+            SET file_hash = COALESCE(?, file_hash),
+                last_seen_path = ?,
+                last_modified = ?,
+                preview_path = COALESCE(?, preview_path),
+                preview_generated = CASE WHEN COALESCE(?, preview_path) IS NOT NULL THEN 1 ELSE preview_generated END,
+                times_seen = CASE WHEN times_seen IS NULL OR times_seen < 1 THEN 1 ELSE times_seen + 1 END
+            WHERE id = ?;
+            """,
+            (file_hash, path, modified_str, preview_path, preview_path, file_id),
+        )
+
+
+def mark_file_sorted(file_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute("UPDATE files SET already_sorted = 1, preview_generated = 1 WHERE id = ?;", (file_id,))
 
 
 def list_files(limit: int = 100) -> list[sqlite3.Row]:
