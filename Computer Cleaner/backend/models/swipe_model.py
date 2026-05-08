@@ -102,6 +102,8 @@ class SwipeFilters:
     date_from: str | None = None
     date_to: str | None = None
     include_inactive: bool = False
+    source: SwipeSource | None = None
+    search: str | None = None
 
 
 @dataclass(frozen=True)
