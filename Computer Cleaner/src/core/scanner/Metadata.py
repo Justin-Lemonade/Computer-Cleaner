@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+MAX_MAGIC_SCAN_BYTES = 64 * 1024 * 1024
+
 
 @dataclass(frozen=True)
 class FileMetadata:
@@ -28,13 +30,23 @@ def _safe_dt_from_ts(ts: float | int | None) -> datetime | None:
 
 
 def detect_mime_type(path: Path) -> str | None:
+    guessed, _ = mimetypes.guess_type(str(path))
+    if guessed:
+        return guessed
+
+    try:
+        file_size = path.stat().st_size
+        if file_size > MAX_MAGIC_SCAN_BYTES:
+            return None
+    except Exception:
+        pass
+
     try:
         import magic  # type: ignore
 
         return magic.from_file(str(path), mime=True)
     except Exception:
-        guessed, _ = mimetypes.guess_type(str(path))
-        return guessed
+        return None
 
 
 def get_basic_metadata(path: Path) -> FileMetadata:
@@ -70,4 +82,3 @@ def is_probably_hidden(path: Path) -> bool:
         return bool(attrs & statmod.FILE_ATTRIBUTE_HIDDEN)  # type: ignore[attr-defined]
     except Exception:
         return False
-

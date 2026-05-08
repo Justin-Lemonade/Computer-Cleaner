@@ -1,0 +1,22 @@
+Slide 1
+10.1 Use Properties of Tangents
+Monday, March 24
+
+Slide 2
+Definitions:
+Circle—set of all points in a plane equidistant from a given point called the center
+Radius—segment whose endpoints are the center and any point on the circle
+Chord—a segment whose endpoints are on a circle
+Diameter—a special chord that contains the center of a circle
+Secant—a line that intersects a circle in two points
+Tangent—a line that intersects the circle in exactly one point, the point of tangency.  A ray and segment can also be tangent.
+
+Slide 5
+READ VOCABULARYThe plural of radius isradii. All radii of a circleare congruent.
+RADIUS AND DIAMETER The words radius and diameter are used for lengths as well as segments. For a given circle, think of a radius and a diameter as segments and the radius and the diameter as lengths.
+
+Slide 9
+READ VOCABULARY A line that intersects a circle in exactly one point is said to be tangent to the circle.
+
+Slide 24
+Homework Assignment:
