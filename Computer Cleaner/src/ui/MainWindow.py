@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-import hashlib
+import logging
 import os
 import sys
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QParallelAnimationGroup, QPropertyAnimation, QRect, QSettings, QSize, Qt, QTimer
+from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QParallelAnimationGroup, QProcess, QPropertyAnimation, QRect, QSettings, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -44,6 +47,20 @@ from scanner.ScanFiles import iter_files
 from ui.FileCard import FileCard
 from ui.InfoPanel import InfoPanel
 from ui.KeyboardShortcuts import add_shortcut
+
+LOGGER = logging.getLogger(__name__)
+PREFETCH_TICK_MS = 80
+DECISION_TIMEOUT_MS = 20000
+HASH_MAX_BYTES = 64 * 1024 * 1024
+MAX_PREVIEW_FILE_SIZE_BYTES = 200 * 1024 * 1024
+
+
+@dataclass
+class _QueuedPreviewRow:
+    row: dict[str, Any] | None
+    source_path: str
+    elapsed_seconds: float
+    error: str | None = None
 
 
 class _ActionButton(QPushButton):
@@ -489,10 +506,21 @@ class MainWindow(QMainWindow):
         self._source_folder: Path | None = None
         self._pending_files: list[Path] = []
         self._pending_cursor = 0
+        self._scan_iter: Any | None = None
+        self._background_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ui-background")
+        self._prefetch_future: Future[list[_QueuedPreviewRow]] | None = None
+        self._swipe_future: Future[tuple[bool, str | None]] | None = None
         self._prefetch_timer = QTimer(self)
-        self._prefetch_timer.setInterval(30)
+        self._prefetch_timer.setInterval(PREFETCH_TICK_MS)
         self._prefetch_timer.timeout.connect(self._process_prefetch_batch)
         self._is_prefetching = False
+        self._swipe_poll_timer = QTimer(self)
+        self._swipe_poll_timer.setInterval(60)
+        self._swipe_poll_timer.timeout.connect(self._poll_swipe_future)
+        self._swipe_watchdog = QTimer(self)
+        self._swipe_watchdog.setSingleShot(True)
+        self._swipe_watchdog.timeout.connect(self._on_swipe_timeout)
+        self._pending_post_reason: dict[str, Any] | None = None
         self._swipe_service = SwipeService(CONFIG.db_path)
 
         root = QWidget()
@@ -564,6 +592,15 @@ class MainWindow(QMainWindow):
             target = self._preview_rect()
             self._active_card.setGeometry(target)
             self._incoming_card.setGeometry(target)
+
+    def closeEvent(self, event) -> None:
+        self._stop_prefetch()
+        if self._swipe_poll_timer.isActive():
+            self._swipe_poll_timer.stop()
+        if self._swipe_watchdog.isActive():
+            self._swipe_watchdog.stop()
+        self._background_executor.shutdown(wait=False, cancel_futures=True)
+        super().closeEvent(event)
 
     def _build_top_bar(self) -> QWidget:
         top = QWidget()
@@ -653,6 +690,8 @@ class MainWindow(QMainWindow):
             return
 
         self._stop_prefetch()
+        if self._swipe_watchdog.isActive():
+            self._swipe_watchdog.stop()
         try:
             with get_connection() as conn:
                 conn.execute("DELETE FROM labels;")
@@ -664,25 +703,42 @@ class MainWindow(QMainWindow):
             return
 
         self._reset_to_default_state()
-        try:
-            QTimer.singleShot(100, self._restart_application)
-        except Exception:
-            self._status.setText("Cache cleared. Restart failed, UI has been reset.")
+        self._restart_application()
 
     def _restart_application(self) -> None:
-        python_exec = sys.executable
         try:
-            os.execl(python_exec, python_exec, *sys.argv)
-        except Exception:
-            self._status.setText("Restart failed. Queue cleared and UI reset.")
+            python_exec = sys.executable
+            argv = list(sys.argv)
+            if not argv:
+                argv = [str(Path(__file__).resolve().parents[2] / "App.py")]
+            ok = QProcess.startDetached(python_exec, argv, str(Path.cwd()))
+            if ok:
+                self.close()
+                return
+            self._status.setText("Restart failed to start detached process. Queue cleared and UI reset.")
+        except Exception as exc:
+            LOGGER.exception("Restart failed")
+            self._status.setText(f"Restart failed ({exc}). Queue cleared and UI reset.")
 
     def _reset_to_default_state(self) -> None:
         self._source_folder = None
         self._pending_files = []
         self._pending_cursor = 0
+        self._scan_iter = None
         self._files = []
         self._reset_indices()
         self._pending_decision = None
+        self._pending_post_reason = None
+        if self._swipe_poll_timer.isActive():
+            self._swipe_poll_timer.stop()
+        if self._swipe_watchdog.isActive():
+            self._swipe_watchdog.stop()
+        if self._prefetch_future and not self._prefetch_future.done():
+            self._prefetch_future.cancel()
+        if self._swipe_future and not self._swipe_future.done():
+            self._swipe_future.cancel()
+        self._prefetch_future = None
+        self._swipe_future = None
         self._reason_panel.setVisible(False)
         self._render_current_file()
 
@@ -1036,7 +1092,9 @@ class MainWindow(QMainWindow):
         return max(1, min(5, self._queue_limit))
 
     def _has_pending_files(self) -> bool:
-        return self._pending_cursor < len(self._pending_files)
+        if self._pending_cursor < len(self._pending_files):
+            return True
+        return self._scan_iter is not None
 
     def _trim_queue_to_limit(self) -> None:
         if len(self._files) <= self._queue_limit:
@@ -1046,43 +1104,35 @@ class MainWindow(QMainWindow):
             self._current_index = 0
         self._render_current_file()
 
+    def _next_pending_path(self) -> Path | None:
+        if self._pending_cursor < len(self._pending_files):
+            path = self._pending_files[self._pending_cursor]
+            self._pending_cursor += 1
+            return path
+        if self._scan_iter is None:
+            return None
+        try:
+            return next(self._scan_iter)
+        except StopIteration:
+            self._scan_iter = None
+            return None
+
     def _fill_queue_sync(self, *, max_items: int) -> int:
         if max_items <= 0:
             return 0
 
         generated = 0
         while generated < max_items and len(self._files) < self._queue_limit and self._has_pending_files():
-            file_path = self._pending_files[self._pending_cursor]
-            self._pending_cursor += 1
+            file_path = self._next_pending_path()
+            if file_path is None:
+                break
             try:
-                metadata = get_basic_metadata(file_path)
-                preview_path = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
-                row = {
-                    "id": upsert_file(
-                        {
-                            "path": str(metadata.path),
-                            "filename": metadata.filename,
-                            "filetype": metadata.filetype,
-                            "mime_type": metadata.mime_type,
-                            "size": metadata.size,
-                            "created_date": metadata.created_date,
-                            "modified_date": metadata.modified_date,
-                            "preview_path": str(preview_path) if preview_path else None,
-                        }
-                    ),
-                    "path": str(metadata.path),
-                    "filename": metadata.filename,
-                    "filetype": metadata.filetype,
-                    "mime_type": metadata.mime_type,
-                    "size": metadata.size,
-                    "created_date": metadata.created_date.isoformat() if metadata.created_date else None,
-                    "modified_date": metadata.modified_date.isoformat() if metadata.modified_date else None,
-                    "preview_path": str(preview_path) if preview_path else None,
-                }
+                row = self._build_row_for_path(file_path)
                 self._files.append(row)
                 generated += 1
             except Exception:
                 # Skip problematic files (e.g., malformed office docs) without crashing queue generation.
+                LOGGER.exception("Queue generation failed for %s", file_path)
                 continue
         return generated
 
@@ -1093,14 +1143,15 @@ class MainWindow(QMainWindow):
             return
         if len(self._files) >= self._queue_limit:
             return
-        if self._prefetch_timer.isActive():
-            return
-        self._prefetch_timer.start()
+        if not self._prefetch_timer.isActive():
+            self._prefetch_timer.start()
 
     def _stop_prefetch(self) -> None:
         if self._prefetch_timer.isActive():
             self._prefetch_timer.stop()
         self._is_prefetching = False
+        if self._prefetch_future and self._prefetch_future.done():
+            self._prefetch_future = None
 
     def _process_prefetch_batch(self) -> None:
         if self._is_prefetching:
@@ -1111,11 +1162,110 @@ class MainWindow(QMainWindow):
                 self._stop_prefetch()
                 return
 
-            added = self._fill_queue_sync(max_items=self._prefetch_batch_size())
-            if added <= 0 or len(self._files) >= self._queue_limit or not self._has_pending_files():
+            if self._prefetch_future is None:
+                batch_paths: list[Path] = []
+                for _ in range(self._prefetch_batch_size()):
+                    next_path = self._next_pending_path()
+                    if next_path is None:
+                        break
+                    batch_paths.append(next_path)
+                if not batch_paths:
+                    self._stop_prefetch()
+                    return
+                self._prefetch_future = self._background_executor.submit(self._build_rows_for_batch, batch_paths)
+                return
+
+            if not self._prefetch_future.done():
+                return
+
+            try:
+                results = self._prefetch_future.result(timeout=0.01)
+            except Exception:
+                LOGGER.exception("Background prefetch batch failed")
+                results = []
+            finally:
+                self._prefetch_future = None
+
+            added = self._apply_prefetch_results(results)
+            if added <= 0 and not self._has_pending_files():
+                self._stop_prefetch()
+                return
+            if not self._auto_generate_preview and self._files:
+                self._stop_prefetch()
+                return
+            if len(self._files) >= self._queue_limit or not self._has_pending_files():
                 self._stop_prefetch()
         finally:
             self._is_prefetching = False
+
+    def _build_rows_for_batch(self, batch_paths: list[Path]) -> list[_QueuedPreviewRow]:
+        results: list[_QueuedPreviewRow] = []
+        for path in batch_paths:
+            started = time.perf_counter()
+            try:
+                row = self._build_row_for_path(path)
+                elapsed = time.perf_counter() - started
+                results.append(_QueuedPreviewRow(row=row, source_path=str(path), elapsed_seconds=elapsed))
+            except Exception as exc:
+                elapsed = time.perf_counter() - started
+                results.append(_QueuedPreviewRow(row=None, source_path=str(path), elapsed_seconds=elapsed, error=str(exc)))
+        return results
+
+    def _apply_prefetch_results(self, results: list[_QueuedPreviewRow]) -> int:
+        had_no_files = not self._files
+        added = 0
+        for result in results:
+            if result.row is None:
+                LOGGER.warning(
+                    "Skipped preview build for %s in %.2fs (%s)",
+                    result.source_path,
+                    result.elapsed_seconds,
+                    result.error or "unknown error",
+                )
+                continue
+            self._files.append(result.row)
+            added += 1
+            LOGGER.info(
+                "Queued %s in %.2fs (queue=%d/%d)",
+                result.source_path,
+                result.elapsed_seconds,
+                len(self._files),
+                self._queue_limit,
+            )
+        if had_no_files and added > 0 and not self._is_animating and self._pending_post_reason is None:
+            self._render_current_file()
+        return added
+
+    def _build_row_for_path(self, file_path: Path) -> dict[str, Any]:
+        metadata = get_basic_metadata(file_path)
+        preview_path = None
+        size = int(metadata.size or 0)
+        if size <= MAX_PREVIEW_FILE_SIZE_BYTES:
+            preview_path = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
+        else:
+            LOGGER.info("Skipping preview generation for large file %s (%d bytes)", file_path, size)
+        return {
+            "id": upsert_file(
+                {
+                    "path": str(metadata.path),
+                    "filename": metadata.filename,
+                    "filetype": metadata.filetype,
+                    "mime_type": metadata.mime_type,
+                    "size": size,
+                    "created_date": metadata.created_date,
+                    "modified_date": metadata.modified_date,
+                    "preview_path": str(preview_path) if preview_path else None,
+                }
+            ),
+            "path": str(metadata.path),
+            "filename": metadata.filename,
+            "filetype": metadata.filetype,
+            "mime_type": metadata.mime_type,
+            "size": size,
+            "created_date": metadata.created_date.isoformat() if metadata.created_date else None,
+            "modified_date": metadata.modified_date.isoformat() if metadata.modified_date else None,
+            "preview_path": str(preview_path) if preview_path else None,
+        }
 
     def _common_user_folders(self) -> list[Path]:
         home = Path.home()
@@ -1158,25 +1308,44 @@ class MainWindow(QMainWindow):
             return
 
         try:
+            self._stop_prefetch()
+            if self._swipe_poll_timer.isActive():
+                self._swipe_poll_timer.stop()
+            if self._prefetch_future and not self._prefetch_future.done():
+                self._prefetch_future.cancel()
+            self._prefetch_future = None
+            scan_started = time.perf_counter()
             self._source_folder = folder
-            self._pending_files = list(iter_files(folder))
+            self._scan_iter = iter_files(folder)
+            self._pending_files = []
             self._pending_cursor = 0
             self._files = []
             self._reset_indices()
-            self._fill_queue_sync(max_items=self._queue_limit)
+            initial_batch = min(self._prefetch_batch_size(), self._queue_limit)
+            self._fill_queue_sync(max_items=initial_batch)
             self._render_current_file()
+            elapsed = time.perf_counter() - scan_started
             if self._files:
                 self._status.setText(
-                    f"Queued {len(self._files)} files from {folder}. "
+                    f"Queued {len(self._files)} files from {folder} in {elapsed:.2f}s. "
                     f"Background prefetch {'enabled' if self._auto_generate_preview else 'disabled'}."
+                )
+                LOGGER.info(
+                    "Folder scan initialized for %s: queue=%d/%d, elapsed=%.2fs",
+                    folder,
+                    len(self._files),
+                    self._queue_limit,
+                    elapsed,
                 )
             else:
                 self._status.setText("Scan completed but no queueable files were found.")
+                LOGGER.info("Folder scan found no queueable files for %s", folder)
             if self._auto_generate_preview:
                 self._start_prefetch_if_needed()
             else:
                 self._stop_prefetch()
         except Exception as exc:
+            LOGGER.exception("Folder processing failed for %s", folder)
             self._status.setText(f"Folder processing failed ({exc})")
 
     def _on_keep(self) -> None:
@@ -1193,6 +1362,12 @@ class MainWindow(QMainWindow):
             return
 
         had_pending_decision = self._pending_decision is not None
+        LOGGER.info(
+            "Decision selected: action=%s label=%s file=%s",
+            action_name,
+            label_name,
+            self._current_file().get("path"),
+        )
         self._pending_decision = {
             "action_name": action_name,
             "label_name": label_name,
@@ -1250,6 +1425,9 @@ class MainWindow(QMainWindow):
     def _submit_reason(self, reason: str) -> None:
         if not self._pending_decision:
             return
+        if self._swipe_future and not self._swipe_future.done():
+            self._status.setText("Still saving the previous decision. Please wait.")
+            return
         for button in self._reason_option_buttons:
             button.setEnabled(False)
         self._custom_reason_input.setEnabled(False)
@@ -1261,137 +1439,247 @@ class MainWindow(QMainWindow):
         decision = self._pending_decision["decision"]
         action_name = self._pending_decision["action_name"]
         offset = self._pending_decision["offset"]
-        if isinstance(file_id, int):
-            try:
-                save_label(file_id, label_name, notes=reason)
-            except Exception as exc:
-                self._status.setText(f"Label save failed ({exc})")
-
         path = str(current.get("path") or "")
         filename = str(current.get("filename") or Path(path).name or "unknown")
         filetype = str(current.get("filetype") or Path(path).suffix.lstrip(".") or "unknown")
         size = int(current.get("size") or 0)
+
+        payload = {
+            "file_id": file_id,
+            "label_name": label_name,
+            "decision": decision,
+            "action_name": action_name,
+            "offset": offset,
+            "reason": reason,
+            "path": path,
+            "filename": filename,
+            "filetype": filetype,
+            "size": max(size, 0),
+        }
+        self._pending_decision = None
+        self._pending_post_reason = payload
+        self._active_card.set_loading_state(True)
+        self._incoming_card.set_loading_state(True)
+        self._status.setText("Saving decision...")
+
+        self._swipe_future = self._background_executor.submit(self._persist_decision_payload, payload)
+        if not self._swipe_poll_timer.isActive():
+            self._swipe_poll_timer.start()
+        self._swipe_watchdog.start(DECISION_TIMEOUT_MS)
+
+    def _persist_decision_payload(self, payload: dict[str, Any]) -> tuple[bool, str | None]:
+        started = time.perf_counter()
+        errors: list[str] = []
+
+        file_id = payload.get("file_id")
+        if isinstance(file_id, int):
+            try:
+                save_label(file_id, str(payload["label_name"]), notes=str(payload["reason"]))
+            except Exception as exc:
+                errors.append(f"label save failed: {exc}")
+
+        path = str(payload.get("path") or "")
         if path:
             try:
-                hash_value = self._compute_file_hash(path)
+                hash_value = self._compute_file_hash(path, max_bytes=HASH_MAX_BYTES)
                 self._swipe_service.save_swipe(
                     SwipeCreate(
                         file_path=path,
-                        file_name=filename,
-                        file_type=filetype,
-                        file_size=max(size, 0),
+                        file_name=str(payload["filename"]),
+                        file_type=str(payload["filetype"]),
+                        file_size=int(payload["size"]),
                         file_hash=hash_value,
-                        decision=decision,
+                        decision=payload["decision"],
                         source=SwipeSource.HUMAN,
-                        reason=reason,
+                        reason=str(payload["reason"]),
                     )
                 )
             except Exception as exc:
-                self._status.setText(f"Decision save failed ({exc})")
+                errors.append(f"swipe save failed: {exc}")
 
-        self._pending_decision = None
+        elapsed = time.perf_counter() - started
+        if errors:
+            LOGGER.warning("Decision persistence completed with errors in %.2fs: %s", elapsed, "; ".join(errors))
+            return False, "; ".join(errors)
+        LOGGER.info("Decision persistence succeeded in %.2fs for %s", elapsed, path)
+        return True, None
+
+    def _poll_swipe_future(self) -> None:
+        if self._swipe_future is None:
+            if self._swipe_poll_timer.isActive():
+                self._swipe_poll_timer.stop()
+            return
+        if not self._swipe_future.done():
+            return
+
+        if self._swipe_watchdog.isActive():
+            self._swipe_watchdog.stop()
+        if self._swipe_poll_timer.isActive():
+            self._swipe_poll_timer.stop()
+
+        success = False
+        error_message: str | None = None
+        try:
+            success, error_message = self._swipe_future.result(timeout=0.01)
+        except Exception as exc:
+            error_message = str(exc)
+            LOGGER.exception("Decision persistence future failed")
+        finally:
+            self._swipe_future = None
+
+        self._complete_post_reason_flow(persist_success=success, persist_error=error_message)
+
+    def _on_swipe_timeout(self) -> None:
+        if self._swipe_future is None:
+            return
+        LOGGER.error("Decision persistence timed out after %sms", DECISION_TIMEOUT_MS)
+        if self._swipe_poll_timer.isActive():
+            self._swipe_poll_timer.stop()
+        self._swipe_future.cancel()
+        self._swipe_future = None
+        self._complete_post_reason_flow(
+            persist_success=False,
+            persist_error=f"timed out after {DECISION_TIMEOUT_MS // 1000}s",
+        )
+
+    def _complete_post_reason_flow(self, *, persist_success: bool, persist_error: str | None) -> None:
+        payload = self._pending_post_reason
+        self._pending_post_reason = None
+        if payload is None:
+            self._active_card.set_loading_state(False)
+            self._incoming_card.set_loading_state(False)
+            return
+
+        action_name = str(payload["action_name"])
+        reason = str(payload["reason"])
+        offset = payload["offset"]
+
         self._reason_panel.setVisible(False)
         if self._files:
             self._files.pop(self._current_index)
         if self._current_index >= len(self._files):
             self._current_index = 0
 
-        if self._auto_generate_preview:
-            if not self._files:
-                self._fill_queue_sync(max_items=1)
+        if not self._files and self._has_pending_files():
+            self._start_prefetch_on_demand()
+        elif self._auto_generate_preview:
             self._start_prefetch_if_needed()
 
         action_text = f"{action_name} ({reason})"
+        if not persist_success and persist_error:
+            self._status.setText(f"{action_text} applied with persistence warning: {persist_error}")
+
         if not self._files:
+            self._active_card.set_loading_state(False)
+            self._incoming_card.set_loading_state(False)
             self._render_current_file(action_text=action_text)
-            self._status.setText(f"{action_text} logged. Queue finished.")
+            if persist_success:
+                self._status.setText(f"{action_text} logged. Queue finished.")
             return
 
         self._animate_to_next(action_text, offset)
+
+    def _start_prefetch_on_demand(self) -> None:
+        if not self._has_pending_files():
+            return
+        if len(self._files) >= self._queue_limit:
+            return
+        if not self._prefetch_timer.isActive():
+            self._prefetch_timer.start()
 
     def _animate_to_next(self, action_name: str, offset: QPoint) -> None:
         if not self._files:
             return
 
-        self._is_animating = True
-        self._pending_action_text = action_name
-        self._active_card.set_loading_state(True)
-        self._incoming_card.set_loading_state(True)
+        try:
+            self._is_animating = True
+            self._pending_action_text = action_name
+            self._active_card.set_loading_state(True)
+            self._incoming_card.set_loading_state(True)
 
-        next_file = self._files[self._current_index]
-        total = len(self._files)
-        self._incoming_card.set_file(next_file)
-        self._incoming_card.setVisible(True)
-        self._info_panel.set_file(next_file, index=self._current_index + 1, total=total)
-        self._subtitle.setText(f"Training mode | File {self._current_index + 1} of {total}")
+            next_file = self._files[self._current_index]
+            total = len(self._files)
+            self._incoming_card.set_file(next_file)
+            self._incoming_card.setVisible(True)
+            self._info_panel.set_file(next_file, index=self._current_index + 1, total=total)
+            self._subtitle.setText(f"Training mode | File {self._current_index + 1} of {total}")
 
-        target = self._preview_rect()
-        outgoing_start = self._active_card.geometry()
-        lateral_sign = 1 if offset.x > 0 else (-1 if offset.x < 0 else 1)
-        outgoing_mid = self._scaled_rect(
-            outgoing_start,
-            0.88,
-            dx=int(offset.x() * 0.48) + int(24 * lateral_sign),
-            dy=int(offset.y() * 0.40) + (22 if offset.x() != 0 else 12),
-        )
-        outgoing_end = self._scaled_rect(
-            outgoing_start,
-            0.68,
-            dx=int(offset.x() * 1.45) + int(34 * lateral_sign),
-            dy=int(offset.y() * 1.34) + (36 if offset.x() != 0 else 20),
-        )
+            target = self._preview_rect()
+            outgoing_start = self._active_card.geometry()
+            lateral_sign = 1 if offset.x() > 0 else (-1 if offset.x() < 0 else 1)
+            outgoing_mid = self._scaled_rect(
+                outgoing_start,
+                0.88,
+                dx=int(offset.x() * 0.48) + int(24 * lateral_sign),
+                dy=int(offset.y() * 0.40) + (22 if offset.x() != 0 else 12),
+            )
+            outgoing_end = self._scaled_rect(
+                outgoing_start,
+                0.68,
+                dx=int(offset.x() * 1.45) + int(34 * lateral_sign),
+                dy=int(offset.y() * 1.34) + (36 if offset.x() != 0 else 20),
+            )
 
-        incoming_start = self._scaled_rect(
-            target,
-            0.72,
-            dx=int(-offset.x() * 0.22),
-            dy=int(-offset.y() * 0.18) + 12,
-        )
-        incoming_overshoot = self._scaled_rect(
-            target,
-            1.04,
-            dx=int(offset.x() * 0.06),
-            dy=int(offset.y() * 0.04),
-        )
-        self._incoming_card.setGeometry(incoming_start)
-        self._incoming_effect.setOpacity(0.0)
+            incoming_start = self._scaled_rect(
+                target,
+                0.72,
+                dx=int(-offset.x() * 0.22),
+                dy=int(-offset.y() * 0.18) + 12,
+            )
+            incoming_overshoot = self._scaled_rect(
+                target,
+                1.04,
+                dx=int(offset.x() * 0.06),
+                dy=int(offset.y() * 0.04),
+            )
+            self._incoming_card.setGeometry(incoming_start)
+            self._incoming_effect.setOpacity(0.0)
 
-        out_geometry = QPropertyAnimation(self._active_card, b"geometry", self)
-        out_geometry.setDuration(420)
-        out_geometry.setEasingCurve(QEasingCurve.Type.InBack)
-        out_geometry.setStartValue(outgoing_start)
-        out_geometry.setKeyValueAt(0.44, outgoing_mid)
-        out_geometry.setEndValue(outgoing_end)
+            out_geometry = QPropertyAnimation(self._active_card, b"geometry", self)
+            out_geometry.setDuration(420)
+            out_geometry.setEasingCurve(QEasingCurve.Type.InBack)
+            out_geometry.setStartValue(outgoing_start)
+            out_geometry.setKeyValueAt(0.44, outgoing_mid)
+            out_geometry.setEndValue(outgoing_end)
 
-        out_fade = QPropertyAnimation(self._active_effect, b"opacity", self)
-        out_fade.setDuration(360)
-        out_fade.setEasingCurve(QEasingCurve.Type.InCubic)
-        out_fade.setStartValue(1.0)
-        out_fade.setEndValue(0.0)
+            out_fade = QPropertyAnimation(self._active_effect, b"opacity", self)
+            out_fade.setDuration(360)
+            out_fade.setEasingCurve(QEasingCurve.Type.InCubic)
+            out_fade.setStartValue(1.0)
+            out_fade.setEndValue(0.0)
 
-        in_geometry = QPropertyAnimation(self._incoming_card, b"geometry", self)
-        in_geometry.setDuration(470)
-        in_geometry.setEasingCurve(QEasingCurve.Type.OutCubic)
-        in_geometry.setStartValue(incoming_start)
-        in_geometry.setKeyValueAt(0.22, incoming_start)
-        in_geometry.setKeyValueAt(0.86, incoming_overshoot)
-        in_geometry.setEndValue(target)
+            in_geometry = QPropertyAnimation(self._incoming_card, b"geometry", self)
+            in_geometry.setDuration(470)
+            in_geometry.setEasingCurve(QEasingCurve.Type.OutCubic)
+            in_geometry.setStartValue(incoming_start)
+            in_geometry.setKeyValueAt(0.22, incoming_start)
+            in_geometry.setKeyValueAt(0.86, incoming_overshoot)
+            in_geometry.setEndValue(target)
 
-        in_fade = QPropertyAnimation(self._incoming_effect, b"opacity", self)
-        in_fade.setDuration(380)
-        in_fade.setEasingCurve(QEasingCurve.Type.OutQuad)
-        in_fade.setStartValue(0.0)
-        in_fade.setKeyValueAt(0.22, 0.0)
-        in_fade.setEndValue(1.0)
+            in_fade = QPropertyAnimation(self._incoming_effect, b"opacity", self)
+            in_fade.setDuration(380)
+            in_fade.setEasingCurve(QEasingCurve.Type.OutQuad)
+            in_fade.setStartValue(0.0)
+            in_fade.setKeyValueAt(0.22, 0.0)
+            in_fade.setEndValue(1.0)
 
-        transition = QParallelAnimationGroup(self)
-        transition.addAnimation(out_geometry)
-        transition.addAnimation(out_fade)
-        transition.addAnimation(in_geometry)
-        transition.addAnimation(in_fade)
-        transition.finished.connect(self._finish_animation)
-        self._active_animation = transition
-        transition.start()
+            transition = QParallelAnimationGroup(self)
+            transition.addAnimation(out_geometry)
+            transition.addAnimation(out_fade)
+            transition.addAnimation(in_geometry)
+            transition.addAnimation(in_fade)
+            transition.finished.connect(self._finish_animation)
+            self._active_animation = transition
+            transition.start()
+            LOGGER.info("Started transition animation for %s", action_name)
+        except Exception:
+            LOGGER.exception("Transition animation failed")
+            self._is_animating = False
+            self._pending_action_text = None
+            self._active_card.set_loading_state(False)
+            self._incoming_card.set_loading_state(False)
+            self._render_current_file()
+            self._status.setText("Transition failed. Recovered to current file.")
 
     def _finish_animation(self) -> None:
         self._is_animating = False
@@ -1416,6 +1704,7 @@ class MainWindow(QMainWindow):
 
         if self._pending_action_text:
             self._status.setText(f"{self._pending_action_text} logged. Showing next file.")
+            LOGGER.info("Completed transition animation for %s", self._pending_action_text)
         self._pending_action_text = None
         self._active_animation = None
 
@@ -1455,19 +1744,33 @@ class MainWindow(QMainWindow):
             return
         self._status.setText("Training mode active.")
 
-    def _compute_file_hash(self, raw_path: str) -> str | None:
+    def _compute_file_hash(self, raw_path: str, *, max_bytes: int | None = None) -> str | None:
         file_path = Path(raw_path)
         if not file_path.exists() or not file_path.is_file():
             return None
 
         digest = sha256()
+        consumed = 0
         try:
             with file_path.open("rb") as handle:
                 while True:
                     block = handle.read(1024 * 1024)
                     if not block:
                         break
+                    if max_bytes is not None and consumed >= max_bytes:
+                        break
+                    if max_bytes is not None and consumed + len(block) > max_bytes:
+                        block = block[: max_bytes - consumed]
                     digest.update(block)
+                    consumed += len(block)
+                    if max_bytes is not None and consumed >= max_bytes:
+                        LOGGER.info(
+                            "Partial hash generated for %s at %d bytes (limit=%d)",
+                            raw_path,
+                            consumed,
+                            max_bytes,
+                        )
+                        break
         except Exception:
             return None
         return digest.hexdigest()

@@ -10,8 +10,10 @@ from Config import CONFIG
 
 def get_connection() -> sqlite3.Connection:
     CONFIG.data_dir.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(CONFIG.db_path))
+    conn = sqlite3.connect(str(CONFIG.db_path), timeout=3.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=3000;")
     return conn
 
 
