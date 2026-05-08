@@ -83,6 +83,8 @@ def build_router(db_path: str | Path) -> APIRouter:
         date_to: str | None = None,
         file_type: str | None = None,
         folder_path: str | None = None,
+        source: SwipeSource | None = None,
+        search: str | None = None,
         sort_field: SwipeSortField = Query(default=SwipeSortField.TIMESTAMP),
         sort_order: SwipeSortOrder = Query(default=SwipeSortOrder.DESC),
         limit: int = Query(default=100, ge=1, le=1000),
@@ -96,6 +98,8 @@ def build_router(db_path: str | Path) -> APIRouter:
             file_type=file_type,
             folder_path=folder_path,
             include_inactive=include_inactive,
+            source=source,
+            search=search,
         )
         items, total = service.get_swipes(
             filters=filters,

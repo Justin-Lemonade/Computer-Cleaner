@@ -84,6 +84,13 @@ class SwipeRepository:
         if filters.date_to:
             where_clauses.append("timestamp <= ?")
             params.append(filters.date_to)
+        if filters.source:
+            where_clauses.append("source = ?")
+            params.append(filters.source.value)
+        if filters.search:
+            where_clauses.append("(file_name LIKE ? OR file_path LIKE ?)")
+            q = f"%{filters.search}%"
+            params.extend([q, q])
         if not filters.include_inactive:
             where_clauses.append("is_active = 1")
 

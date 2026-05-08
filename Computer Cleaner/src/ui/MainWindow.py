@@ -43,6 +43,7 @@ from scanner.Metadata import get_basic_metadata
 from scanner.ScanFiles import iter_files
 from ui.FileCard import FileCard
 from ui.InfoPanel import InfoPanel
+from ui.HistoryPage import HistoryPage
 from ui.KeyboardShortcuts import add_shortcut
 
 
@@ -613,11 +614,21 @@ class MainWindow(QMainWindow):
         clear_cache_action.triggered.connect(self._clear_cache_and_restart)
         menu.addAction(clear_cache_action)
 
-        for action_name in ("History", "Search"):
-            action = QAction(action_name, self)
-            action.triggered.connect(lambda _checked=False, value=action_name: self._status.setText(f"{value} coming soon."))
-            menu.addAction(action)
+        history_action = QAction("History", self)
+        history_action.triggered.connect(self._open_history_page)
+        menu.addAction(history_action)
+
+        search_action = QAction("Search", self)
+        search_action.triggered.connect(lambda _checked=False: self._status.setText("Search coming soon."))
+        menu.addAction(search_action)
         return menu
+
+
+    def _open_history_page(self) -> None:
+        self._history_dialog = HistoryPage(self._swipe_service, self)
+        self._history_dialog.show()
+        self._history_dialog.raise_()
+        self._history_dialog.activateWindow()
 
     def _open_settings(self) -> None:
         dialog = _SettingsDialog(
