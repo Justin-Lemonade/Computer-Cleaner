@@ -73,3 +73,54 @@ Changes:
 ## Known Remaining Risk
 
 - A third-party parsing call that blocks indefinitely inside a worker thread can still keep that worker occupied until completion; UI now remains responsive, but that worker cannot be force-killed safely from `ThreadPoolExecutor`.
+
+## Option 6 Duplicate-Prevention Hardening (Hybrid Metadata + Hash Identity)
+
+Additional pass completed to enforce "never re-sort already sorted files":
+
+- Added `find_file_by_path_signature(...)` for fast metadata-first checks (`path + modified_date + size`) before hashing.
+- Updated queue admission in `MainWindow`:
+  - path-signature hit + `already_sorted=1` => skip immediately
+  - hash lookup only when signature is uncertain/missing
+  - hash match with sorted row => skip (supports moved/copied files)
+  - preview reuse now validates file existence on disk before using cached path
+  - if cached preview is missing, preview regenerates and DB is refreshed
+- Added in-memory queue dedupe sets:
+  - `_queued_paths` and `_queued_hashes`
+  - prevents duplicate queue entries in the same session/prefetch cycle
+- Fixed persistence consistency bug:
+  - `mark_file_sorted(...)` now only runs when swipe save succeeds
+  - removed broken exception path that referenced an undefined variable
+- Filtered startup queue load to unsorted files only:
+  - `list_files(...)` now returns rows where `already_sorted = 0`
+- Added BLAKE3-first hashing with SHA-256 fallback:
+  - `compute_file_hash(...)` attempts `blake3` when available, falls back safely to SHA-256
+  - requirement added: `blake3`
+
+### Verification Notes (manual scripted checks)
+
+- Re-scan same folder after sorting one file:
+  - sorted file is skipped, unsorted file remains queueable.
+- Copy a sorted file into a new folder:
+  - copied file is skipped via hash match (`already_sorted`).
+
+## 2026-05-09 UI Interaction Fixes
+
+- Random folder picker updated from deterministic selection to true random selection across available common folders, with rotation away from the currently active source when possible.
+- Folder selection now supports queue merge modes:
+  - `Replace Queue`
+  - `Add To Start`
+  - `Add To End`
+- Queue session limit support added so manual merges can extend queue length beyond base settings limit for the current load session.
+- `Add To Start` behavior now prioritizes newly loaded files before existing queued files.
+- Action buttons updated with stronger hover treatment:
+  - larger hover size
+  - stronger multidirectional glow/shadow
+  - increased spacing between buttons to avoid overlap.
+- Mode selector vertical alignment adjusted to center-align with bottom action controls.
+- Mode selector now has subtle hover glow on container.
+- Swipe transition timing adjusted for smoother staging and clearer reveal:
+  - longer outgoing and incoming motion
+  - delayed incoming rise for better separation.
+- More-info flow updated to enable an enlarged preview mode signal:
+  - details toggle now switches FileCard focus mode for bigger rendered preview content.

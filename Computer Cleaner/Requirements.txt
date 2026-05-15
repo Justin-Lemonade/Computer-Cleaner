@@ -9,6 +9,7 @@ extract-msg
 py7zr
 rarfile
 chardet
+blake3
 streamlit
 pandas
 numpy

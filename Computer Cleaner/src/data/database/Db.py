@@ -59,6 +59,7 @@ def init_db() -> None:
             conn.execute("ALTER TABLE files ADD COLUMN times_seen INTEGER NOT NULL DEFAULT 0;")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_files_file_hash ON files(file_hash);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_files_already_sorted ON files(already_sorted);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_files_path_signature ON files(path, modified_date, size);")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS labels (
@@ -127,6 +128,20 @@ def find_file_by_hash(file_hash: str) -> sqlite3.Row | None:
         ).fetchone()
 
 
+def find_file_by_path_signature(*, path: str, modified_date: datetime | None, size: int | None) -> sqlite3.Row | None:
+    modified_str = modified_date.isoformat() if isinstance(modified_date, datetime) else None
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM files
+            WHERE path = ? AND COALESCE(size, -1) = COALESCE(?, -1) AND COALESCE(modified_date, '') = COALESCE(?, '')
+            ORDER BY id DESC
+            LIMIT 1;
+            """,
+            (path, size, modified_str),
+        ).fetchone()
+
+
 def mark_file_seen(*, file_id: int, path: str, modified_date: datetime | None, preview_path: str | None, file_hash: str | None) -> None:
     modified_str = modified_date.isoformat() if isinstance(modified_date, datetime) else None
     with get_connection() as conn:
@@ -153,7 +168,7 @@ def mark_file_sorted(file_id: int) -> None:
 def list_files(limit: int = 100) -> list[sqlite3.Row]:
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM files ORDER BY modified_date DESC NULLS LAST, id DESC LIMIT ?;",
+            "SELECT * FROM files WHERE COALESCE(already_sorted, 0) = 0 ORDER BY modified_date DESC NULLS LAST, id DESC LIMIT ?;",
             (limit,),
         ).fetchall()
     return list(rows)

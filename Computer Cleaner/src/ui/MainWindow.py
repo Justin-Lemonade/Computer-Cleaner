@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import sys
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QParallelAnimationGroup, QProcess, QPropertyAnimation, QRect, QSettings, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QFont
@@ -39,7 +39,15 @@ from PySide6.QtWidgets import (
 from Config import CONFIG
 from backend.models.swipe_model import SwipeCreate, SwipeDecision, SwipeSource
 from backend.services.swipe_service import SwipeService
-from database.Db import find_file_by_hash, get_connection, list_files, mark_file_seen, mark_file_sorted, upsert_file
+from database.Db import (
+    find_file_by_hash,
+    find_file_by_path_signature,
+    get_connection,
+    list_files,
+    mark_file_seen,
+    mark_file_sorted,
+    upsert_file,
+)
 from logic.LabelHandler import LABEL_ARCHIVE, LABEL_KEEP, LABEL_NOT_NEEDED, save_label
 from preview.PreviewManager import build_preview
 from scanner.Metadata import get_basic_metadata
@@ -76,24 +84,27 @@ class _ActionButton(QPushButton):
     def __init__(self, text: str, role: str) -> None:
         super().__init__(text)
         self._base_size = QSize(138, 46)
+        self._hover_size = QSize(150, 52)
         self._role = role
         self.setFixedSize(self._base_size)
         self._shadow = QGraphicsDropShadowEffect(self)
         self._shadow.setOffset(0, 10)
-        self._shadow.setBlurRadius(16)
+        self._shadow.setBlurRadius(22)
         self._shadow.setColor(QColor(0, 0, 0, 0))
         self.setGraphicsEffect(self._shadow)
 
     def enterEvent(self, event) -> None:
-        self._shadow.setBlurRadius(34)
-        self._shadow.setOffset(0, 12)
+        self.setFixedSize(self._hover_size)
+        self._shadow.setBlurRadius(44)
+        self._shadow.setOffset(0, 14)
         color = QColor(self._ROLE_COLORS.get(self._role, "#8e8e8e"))
-        color.setAlpha(170)
+        color.setAlpha(190)
         self._shadow.setColor(color)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self._shadow.setBlurRadius(16)
+        self.setFixedSize(self._base_size)
+        self._shadow.setBlurRadius(22)
         self._shadow.setOffset(0, 10)
         self._shadow.setColor(QColor(0, 0, 0, 0))
         super().leaveEvent(event)
@@ -189,6 +200,12 @@ class _ModeSelector(QFrame):
             self._buttons[mode] = button
             self._effects[mode] = effect
 
+        self._selector_glow = QGraphicsDropShadowEffect(self)
+        self._selector_glow.setOffset(0, 0)
+        self._selector_glow.setBlurRadius(0)
+        self._selector_glow.setColor(QColor(25, 195, 125, 0))
+        self.setGraphicsEffect(self._selector_glow)
+
         self._arrange(immediate=True)
         self.setStyleSheet(
             """
@@ -210,11 +227,15 @@ class _ModeSelector(QFrame):
 
     def enterEvent(self, event) -> None:
         self._expanded = True
+        self._selector_glow.setBlurRadius(16)
+        self._selector_glow.setColor(QColor(25, 195, 125, 55))
         self._arrange(immediate=False)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
         self._expanded = False
+        self._selector_glow.setBlurRadius(0)
+        self._selector_glow.setColor(QColor(25, 195, 125, 0))
         self._arrange(immediate=False)
         super().leaveEvent(event)
 
@@ -356,7 +377,7 @@ class _BottomBar(QWidget):
         # ── Mode selector: anchor to bottom-right ──────────────────────
         ms_w = self._mode_selector.width()
         ms_h = self._mode_selector.height()
-        ms_y = bar_h - ms_h
+        ms_y = (bar_h - ms_h) // 2
         ms_x = bar_w - ms_w
         self._mode_selector.move(ms_x, ms_y)
 
@@ -494,12 +515,14 @@ class MainWindow(QMainWindow):
         self._files: list[dict[str, Any]] = []
         self._current_index = 0
         self._is_animating = False
+        self._is_detail_mode = False
         self._active_animation: QParallelAnimationGroup | None = None
         self._pending_decision: dict[str, Any] | None = None
         self._pending_action_text: str | None = None
         self._reason_option_buttons: list[QPushButton] = []
         self._settings = QSettings("FileSorterAI", "DesktopUI")
         self._queue_limit = int(self._settings.value("queue_limit", 20))
+        self._queue_session_limit: int | None = None
         self._auto_generate_preview = str(self._settings.value("auto_generate_preview", "false")).lower() in {
             "true",
             "1",
@@ -509,6 +532,8 @@ class MainWindow(QMainWindow):
         self._pending_files: list[Path] = []
         self._pending_cursor = 0
         self._scan_iter: Any | None = None
+        self._queued_hashes: set[str] = set()
+        self._queued_paths: set[str] = set()
         self._background_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ui-background")
         self._prefetch_future: Future[list[_QueuedPreviewRow]] | None = None
         self._swipe_future: Future[tuple[bool, str | None]] | None = None
@@ -591,7 +616,7 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         self._empty_state.setGeometry(self._preview_rect())
         if not self._is_animating:
-            target = self._preview_rect()
+            target = self._preview_target_rect()
             self._active_card.setGeometry(target)
             self._incoming_card.setGeometry(target)
 
@@ -734,9 +759,12 @@ class MainWindow(QMainWindow):
 
     def _reset_to_default_state(self) -> None:
         self._source_folder = None
+        self._queue_session_limit = None
         self._pending_files = []
         self._pending_cursor = 0
         self._scan_iter = None
+        self._queued_hashes.clear()
+        self._queued_paths.clear()
         self._files = []
         self._reset_indices()
         self._pending_decision = None
@@ -759,7 +787,7 @@ class MainWindow(QMainWindow):
         dock.setObjectName("ActionDock")
         layout = QHBoxLayout(dock)
         layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        layout.setSpacing(16)
         layout.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter)
 
         specs = [
@@ -1033,6 +1061,10 @@ class MainWindow(QMainWindow):
         try:
             rows = list_files(limit=self._queue_limit)
             self._files = [dict(row) for row in rows]
+            self._queued_hashes.clear()
+            self._queued_paths.clear()
+            for row in self._files:
+                self._register_queued_row(row)
             self._reset_indices()
         except Exception as exc:
             self._files = []
@@ -1071,8 +1103,10 @@ class MainWindow(QMainWindow):
         self._active_card.set_file(current)
         self._active_card.set_loading_state(False)
         self._incoming_card.set_loading_state(False)
+        self._active_card.set_focus_mode(self._is_detail_mode)
+        self._incoming_card.set_focus_mode(self._is_detail_mode)
         self._info_panel.set_file(current, index=self._current_index + 1, total=total)
-        self._active_card.setGeometry(self._preview_rect())
+        self._active_card.setGeometry(self._preview_target_rect())
         self._active_effect.setOpacity(1.0)
         self._incoming_effect.setOpacity(0.0)
         self._incoming_card.setVisible(False)
@@ -1088,6 +1122,17 @@ class MainWindow(QMainWindow):
         y = rect.y() + (rect.height() - height) // 2
         return QRect(x, y, width, height)
 
+    def _preview_target_rect(self) -> QRect:
+        base = self._preview_rect()
+        if not self._is_detail_mode:
+            return base
+        stage = self._preview_stage.contentsRect()
+        width = min(max(stage.width() - 12, base.width()), 1180)
+        height = min(max(stage.height() - 12, base.height()), 760)
+        x = stage.x() + (stage.width() - width) // 2
+        y = stage.y() + (stage.height() - height) // 2
+        return QRect(x, y, width, height)
+
     def _current_file(self) -> dict[str, Any]:
         return self._files[self._current_index]
 
@@ -1101,7 +1146,12 @@ class MainWindow(QMainWindow):
         self._action_dock.setEnabled(not is_visible)
 
     def _prefetch_batch_size(self) -> int:
-        return max(1, min(5, self._queue_limit))
+        return max(1, min(5, self._effective_queue_limit()))
+
+    def _effective_queue_limit(self) -> int:
+        if self._queue_session_limit is None:
+            return self._queue_limit
+        return max(self._queue_limit, self._queue_session_limit)
 
     def _has_pending_files(self) -> bool:
         if self._pending_cursor < len(self._pending_files):
@@ -1134,61 +1184,16 @@ class MainWindow(QMainWindow):
             return 0
 
         generated = 0
-        while generated < max_items and len(self._files) < self._queue_limit and self._has_pending_files():
+        while generated < max_items and len(self._files) < self._effective_queue_limit() and self._has_pending_files():
             file_path = self._next_pending_path()
             if file_path is None:
                 break
             try:
-                metadata = get_basic_metadata(file_path)
-                hash_value = compute_file_hash(file_path)
-                existing_hash_row = find_file_by_hash(hash_value) if hash_value else None
-                if existing_hash_row and int(existing_hash_row["already_sorted"] or 0) == 1:
-                    mark_file_seen(
-                        file_id=int(existing_hash_row["id"]),
-                        path=str(metadata.path),
-                        modified_date=metadata.modified_date,
-                        preview_path=existing_hash_row["preview_path"],
-                        file_hash=hash_value,
-                    )
-                    continue
-
-                preview_path_value = existing_hash_row["preview_path"] if existing_hash_row else None
-                if not preview_path_value:
-                    built_preview = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
-                    preview_path_value = str(built_preview) if built_preview else None
-
-                row_id = upsert_file(
-                    {
-                        "path": str(metadata.path),
-                        "filename": metadata.filename,
-                        "filetype": metadata.filetype,
-                        "mime_type": metadata.mime_type,
-                        "size": metadata.size,
-                        "created_date": metadata.created_date,
-                        "modified_date": metadata.modified_date,
-                        "preview_path": preview_path_value,
-                    }
-                )
-                mark_file_seen(
-                    file_id=row_id,
-                    path=str(metadata.path),
-                    modified_date=metadata.modified_date,
-                    preview_path=preview_path_value,
-                    file_hash=hash_value,
-                )
-                row = {
-                    "id": row_id,
-                    "path": str(metadata.path),
-                    "filename": metadata.filename,
-                    "filetype": metadata.filetype,
-                    "mime_type": metadata.mime_type,
-                    "size": metadata.size,
-                    "created_date": metadata.created_date.isoformat() if metadata.created_date else None,
-                    "modified_date": metadata.modified_date.isoformat() if metadata.modified_date else None,
-                    "preview_path": preview_path_value,
-                }
                 row = self._build_row_for_path(file_path)
+                if row is None:
+                    continue
                 self._files.append(row)
+                self._register_queued_row(row)
                 generated += 1
             except Exception:
                 # Skip problematic files (e.g., malformed office docs) without crashing queue generation.
@@ -1201,7 +1206,7 @@ class MainWindow(QMainWindow):
             return
         if not self._has_pending_files():
             return
-        if len(self._files) >= self._queue_limit:
+        if len(self._files) >= self._effective_queue_limit():
             return
         if not self._prefetch_timer.isActive():
             self._prefetch_timer.start()
@@ -1212,13 +1217,15 @@ class MainWindow(QMainWindow):
         self._is_prefetching = False
         if self._prefetch_future and self._prefetch_future.done():
             self._prefetch_future = None
+        if not self._has_pending_files():
+            self._queue_session_limit = None
 
     def _process_prefetch_batch(self) -> None:
         if self._is_prefetching:
             return
         self._is_prefetching = True
         try:
-            if len(self._files) >= self._queue_limit or not self._has_pending_files():
+            if len(self._files) >= self._effective_queue_limit() or not self._has_pending_files():
                 self._stop_prefetch()
                 return
 
@@ -1253,7 +1260,7 @@ class MainWindow(QMainWindow):
             if not self._auto_generate_preview and self._files:
                 self._stop_prefetch()
                 return
-            if len(self._files) >= self._queue_limit or not self._has_pending_files():
+            if len(self._files) >= self._effective_queue_limit() or not self._has_pending_files():
                 self._stop_prefetch()
         finally:
             self._is_prefetching = False
@@ -1284,6 +1291,7 @@ class MainWindow(QMainWindow):
                 )
                 continue
             self._files.append(result.row)
+            self._register_queued_row(result.row)
             added += 1
             LOGGER.info(
                 "Queued %s in %.2fs (queue=%d/%d)",
@@ -1296,36 +1304,151 @@ class MainWindow(QMainWindow):
             self._render_current_file()
         return added
 
-    def _build_row_for_path(self, file_path: Path) -> dict[str, Any]:
+    def _build_row_for_path(self, file_path: Path) -> dict[str, Any] | None:
         metadata = get_basic_metadata(file_path)
-        preview_path = None
+        path_text = str(metadata.path)
+        path_key = self._normalize_path_key(path_text)
         size = int(metadata.size or 0)
+
+        if path_key in self._queued_paths:
+            return None
+
+        existing_path_row = find_file_by_path_signature(
+            path=path_text,
+            modified_date=metadata.modified_date,
+            size=size,
+        )
+        if existing_path_row is not None:
+            existing_file_id = int(existing_path_row["id"])
+            existing_hash = str(existing_path_row["file_hash"] or "")
+            existing_preview = self._valid_preview_path(existing_path_row["preview_path"])
+            mark_file_seen(
+                file_id=existing_file_id,
+                path=path_text,
+                modified_date=metadata.modified_date,
+                preview_path=existing_preview,
+                file_hash=existing_hash or None,
+            )
+            if int(existing_path_row["already_sorted"] or 0) == 1:
+                LOGGER.info("Skipping sorted file by path signature: %s", path_text)
+                return None
+            if existing_hash and existing_hash in self._queued_hashes:
+                return None
+            if existing_preview is None and size <= MAX_PREVIEW_FILE_SIZE_BYTES:
+                built_preview = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
+                existing_preview = self._valid_preview_path(str(built_preview) if built_preview else None)
+                mark_file_seen(
+                    file_id=existing_file_id,
+                    path=path_text,
+                    modified_date=metadata.modified_date,
+                    preview_path=existing_preview,
+                    file_hash=existing_hash or None,
+                )
+            return {
+                "id": existing_file_id,
+                "path": path_text,
+                "filename": metadata.filename,
+                "filetype": metadata.filetype,
+                "mime_type": metadata.mime_type,
+                "size": size,
+                "created_date": metadata.created_date.isoformat() if metadata.created_date else None,
+                "modified_date": metadata.modified_date.isoformat() if metadata.modified_date else None,
+                "preview_path": existing_preview,
+                "file_hash": existing_hash or None,
+            }
+
+        hash_value = compute_file_hash(file_path)
+        if hash_value and hash_value in self._queued_hashes:
+            return None
+
+        existing_hash_row = find_file_by_hash(hash_value) if hash_value else None
+        if existing_hash_row is not None:
+            existing_file_id = int(existing_hash_row["id"])
+            existing_preview = self._valid_preview_path(existing_hash_row["preview_path"])
+            mark_file_seen(
+                file_id=existing_file_id,
+                path=path_text,
+                modified_date=metadata.modified_date,
+                preview_path=existing_preview,
+                file_hash=hash_value,
+            )
+            if int(existing_hash_row["already_sorted"] or 0) == 1:
+                LOGGER.info("Skipping sorted file by hash match: %s", path_text)
+                return None
+
+        preview_path = None
+        preview_reused = self._valid_preview_path(existing_hash_row["preview_path"]) if existing_hash_row is not None else None
+        if preview_reused is not None:
+            preview_path = preview_reused
         if size <= MAX_PREVIEW_FILE_SIZE_BYTES:
-            preview_path = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
+            if preview_path is None:
+                built_preview = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
+                preview_path = self._valid_preview_path(str(built_preview) if built_preview else None)
         else:
             LOGGER.info("Skipping preview generation for large file %s (%d bytes)", file_path, size)
+
+        row_id = upsert_file(
+            {
+                "path": path_text,
+                "filename": metadata.filename,
+                "filetype": metadata.filetype,
+                "mime_type": metadata.mime_type,
+                "size": size,
+                "created_date": metadata.created_date,
+                "modified_date": metadata.modified_date,
+                "preview_path": preview_path,
+            }
+        )
+        mark_file_seen(
+            file_id=row_id,
+            path=path_text,
+            modified_date=metadata.modified_date,
+            preview_path=preview_path,
+            file_hash=hash_value,
+        )
+
         return {
-            "id": upsert_file(
-                {
-                    "path": str(metadata.path),
-                    "filename": metadata.filename,
-                    "filetype": metadata.filetype,
-                    "mime_type": metadata.mime_type,
-                    "size": size,
-                    "created_date": metadata.created_date,
-                    "modified_date": metadata.modified_date,
-                    "preview_path": str(preview_path) if preview_path else None,
-                }
-            ),
-            "path": str(metadata.path),
+            "id": row_id,
+            "path": path_text,
             "filename": metadata.filename,
             "filetype": metadata.filetype,
             "mime_type": metadata.mime_type,
             "size": size,
             "created_date": metadata.created_date.isoformat() if metadata.created_date else None,
             "modified_date": metadata.modified_date.isoformat() if metadata.modified_date else None,
-            "preview_path": str(preview_path) if preview_path else None,
+            "preview_path": preview_path,
+            "file_hash": hash_value,
         }
+
+    def _valid_preview_path(self, preview_path: Any) -> str | None:
+        if not preview_path:
+            return None
+        preview_text = str(preview_path)
+        try:
+            if Path(preview_text).exists():
+                return preview_text
+        except Exception:
+            return None
+        return None
+
+    def _normalize_path_key(self, path_text: str) -> str:
+        return os.path.normcase(os.path.abspath(path_text.strip()))
+
+    def _register_queued_row(self, row: dict[str, Any]) -> None:
+        raw_path = str(row.get("path") or "").strip()
+        if raw_path:
+            self._queued_paths.add(self._normalize_path_key(raw_path))
+        file_hash = str(row.get("file_hash") or "").strip()
+        if file_hash:
+            self._queued_hashes.add(file_hash)
+
+    def _unregister_queued_row(self, row: dict[str, Any]) -> None:
+        raw_path = str(row.get("path") or "").strip()
+        if raw_path:
+            self._queued_paths.discard(self._normalize_path_key(raw_path))
+        file_hash = str(row.get("file_hash") or "").strip()
+        if file_hash:
+            self._queued_hashes.discard(file_hash)
 
     def _common_user_folders(self) -> list[Path]:
         home = Path.home()
@@ -1339,29 +1462,64 @@ class MainWindow(QMainWindow):
         ]
         return [folder for folder in candidates if folder.exists() and folder.is_dir()]
 
-    def _deterministic_folder_choice(self) -> Path | None:
-        folders = sorted(self._common_user_folders(), key=lambda item: str(item).lower())
+    def _random_folder_choice(self) -> Path | None:
+        folders = self._common_user_folders()
         if not folders:
             return None
-        digest = sha256(str(Path.home()).encode("utf-8")).hexdigest()
-        index = int(digest[:8], 16) % len(folders)
-        return folders[index]
+
+        candidates = folders[:]
+        if self._source_folder is not None and len(candidates) > 1:
+            candidates = [folder for folder in candidates if folder.resolve() != self._source_folder.resolve()] or candidates
+        return random.choice(candidates)
 
     def _select_folder(self) -> None:
         selected = QFileDialog.getExistingDirectory(self, "Select folder to scan", str(Path.home()))
         if not selected:
             self._status.setText("Folder selection cancelled.")
             return
-        self._scan_folder_and_prepare_queue(Path(selected))
+        mode = self._resolve_folder_load_mode()
+        if mode == "cancel":
+            self._status.setText("Folder load cancelled.")
+            return
+        self._scan_folder_and_prepare_queue(Path(selected), mode=mode)
 
     def _choose_random_folder(self) -> None:
-        selected = self._deterministic_folder_choice()
+        selected = self._random_folder_choice()
         if selected is None:
             self._status.setText("No common user folders were found.")
             return
-        self._scan_folder_and_prepare_queue(selected)
+        mode = self._resolve_folder_load_mode()
+        if mode == "cancel":
+            self._status.setText("Random folder load cancelled.")
+            return
+        self._scan_folder_and_prepare_queue(selected, mode=mode)
 
-    def _scan_folder_and_prepare_queue(self, folder: Path) -> None:
+    def _resolve_folder_load_mode(self) -> Literal["replace", "add_start", "add_end", "cancel"]:
+        if not self._files and not self._has_pending_files():
+            return "replace"
+
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Question)
+        dialog.setWindowTitle("Add Folder To Queue")
+        dialog.setText("How do you want to load this folder?")
+        replace_button = dialog.addButton("Replace Queue", QMessageBox.ButtonRole.DestructiveRole)
+        add_start_button = dialog.addButton("Add To Start", QMessageBox.ButtonRole.AcceptRole)
+        add_end_button = dialog.addButton("Add To End", QMessageBox.ButtonRole.ActionRole)
+        cancel_button = dialog.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        dialog.exec()
+        clicked = dialog.clickedButton()
+
+        if clicked == replace_button:
+            return "replace"
+        if clicked == add_start_button:
+            return "add_start"
+        if clicked == add_end_button:
+            return "add_end"
+        if clicked == cancel_button:
+            return "cancel"
+        return "cancel"
+
+    def _scan_folder_and_prepare_queue(self, folder: Path, *, mode: Literal["replace", "add_start", "add_end"] = "replace") -> None:
         folder = folder.expanduser()
         if not folder.exists() or not folder.is_dir():
             self._status.setText(f"Invalid folder selected: {folder}")
@@ -1376,18 +1534,52 @@ class MainWindow(QMainWindow):
             self._prefetch_future = None
             scan_started = time.perf_counter()
             self._source_folder = folder
-            self._scan_iter = iter_files(folder)
-            self._pending_files = []
-            self._pending_cursor = 0
-            self._files = []
-            self._reset_indices()
+            loaded_paths = list(iter_files(folder))
+            if mode == "replace":
+                self._queue_session_limit = None
+                self._scan_iter = None
+                self._pending_files = loaded_paths
+                self._pending_cursor = 0
+                self._queued_hashes.clear()
+                self._queued_paths.clear()
+                self._files = []
+                self._reset_indices()
+            else:
+                existing_rows = list(self._files)
+                remaining_pending = self._pending_files[self._pending_cursor :] if self._pending_cursor < len(self._pending_files) else []
+                self._scan_iter = None
+                if mode == "add_start":
+                    self._pending_files = loaded_paths + remaining_pending
+                    self._files = []
+                else:
+                    self._pending_files = remaining_pending + loaded_paths
+                self._pending_cursor = 0
+                self._queued_hashes.clear()
+                self._queued_paths.clear()
+                for row in self._files:
+                    self._register_queued_row(row)
+                if mode == "add_start":
+                    self._queue_session_limit = len(existing_rows) + len(loaded_paths) + len(remaining_pending)
+                else:
+                    self._queue_session_limit = len(self._files) + len(loaded_paths) + len(remaining_pending)
+
             initial_batch = min(self._prefetch_batch_size(), self._queue_limit)
             self._fill_queue_sync(max_items=initial_batch)
+            if mode == "add_start":
+                for row in existing_rows:
+                    normalized_path = self._normalize_path_key(str(row.get("path") or ""))
+                    row_hash = str(row.get("file_hash") or "")
+                    if normalized_path in self._queued_paths:
+                        continue
+                    if row_hash and row_hash in self._queued_hashes:
+                        continue
+                    self._files.append(row)
+                    self._register_queued_row(row)
             self._render_current_file()
             elapsed = time.perf_counter() - scan_started
             if self._files:
                 self._status.setText(
-                    f"Queued {len(self._files)} files from {folder} in {elapsed:.2f}s. "
+                    f"Queue updated ({mode}). {len(self._files)} files visible after loading {folder} in {elapsed:.2f}s. "
                     f"Background prefetch {'enabled' if self._auto_generate_preview else 'disabled'}."
                 )
                 LOGGER.info(
@@ -1539,6 +1731,7 @@ class MainWindow(QMainWindow):
                 errors.append(f"label save failed: {exc}")
 
         path = str(payload.get("path") or "")
+        swipe_saved = False
         if path:
             try:
                 hash_value = self._compute_file_hash(path, max_bytes=HASH_MAX_BYTES)
@@ -1554,14 +1747,17 @@ class MainWindow(QMainWindow):
                         reason=str(payload["reason"]),
                     )
                 )
+                swipe_saved = True
             except Exception as exc:
-                self._status.setText(f"Decision save failed ({exc})")
-        if isinstance(file_id, int):
-            try:
-                mark_file_sorted(file_id)
-            except Exception:
-                pass
                 errors.append(f"swipe save failed: {exc}")
+        if isinstance(file_id, int):
+            if swipe_saved:
+                try:
+                    mark_file_sorted(file_id)
+                except Exception as exc:
+                    errors.append(f"mark sorted failed: {exc}")
+            else:
+                errors.append("skipped mark sorted because swipe save did not succeed")
 
         elapsed = time.perf_counter() - started
         if errors:
@@ -1622,7 +1818,8 @@ class MainWindow(QMainWindow):
 
         self._reason_panel.setVisible(False)
         if self._files:
-            self._files.pop(self._current_index)
+            removed_row = self._files.pop(self._current_index)
+            self._unregister_queued_row(removed_row)
         if self._current_index >= len(self._files):
             self._current_index = 0
 
@@ -1648,7 +1845,7 @@ class MainWindow(QMainWindow):
     def _start_prefetch_on_demand(self) -> None:
         if not self._has_pending_files():
             return
-        if len(self._files) >= self._queue_limit:
+        if len(self._files) >= self._effective_queue_limit():
             return
         if not self._prefetch_timer.isActive():
             self._prefetch_timer.start()
@@ -1670,7 +1867,7 @@ class MainWindow(QMainWindow):
             self._info_panel.set_file(next_file, index=self._current_index + 1, total=total)
             self._subtitle.setText(f"Training mode | File {self._current_index + 1} of {total}")
 
-            target = self._preview_rect()
+            target = self._preview_target_rect()
             outgoing_start = self._active_card.geometry()
             lateral_sign = 1 if offset.x() > 0 else (-1 if offset.x() < 0 else 1)
             outgoing_mid = self._scaled_rect(
@@ -1702,31 +1899,31 @@ class MainWindow(QMainWindow):
             self._incoming_effect.setOpacity(0.0)
 
             out_geometry = QPropertyAnimation(self._active_card, b"geometry", self)
-            out_geometry.setDuration(420)
-            out_geometry.setEasingCurve(QEasingCurve.Type.InBack)
+            out_geometry.setDuration(540)
+            out_geometry.setEasingCurve(QEasingCurve.Type.InOutCubic)
             out_geometry.setStartValue(outgoing_start)
-            out_geometry.setKeyValueAt(0.44, outgoing_mid)
+            out_geometry.setKeyValueAt(0.52, outgoing_mid)
             out_geometry.setEndValue(outgoing_end)
 
             out_fade = QPropertyAnimation(self._active_effect, b"opacity", self)
-            out_fade.setDuration(360)
-            out_fade.setEasingCurve(QEasingCurve.Type.InCubic)
+            out_fade.setDuration(520)
+            out_fade.setEasingCurve(QEasingCurve.Type.InOutQuad)
             out_fade.setStartValue(1.0)
             out_fade.setEndValue(0.0)
 
             in_geometry = QPropertyAnimation(self._incoming_card, b"geometry", self)
-            in_geometry.setDuration(470)
-            in_geometry.setEasingCurve(QEasingCurve.Type.OutCubic)
+            in_geometry.setDuration(620)
+            in_geometry.setEasingCurve(QEasingCurve.Type.OutQuart)
             in_geometry.setStartValue(incoming_start)
-            in_geometry.setKeyValueAt(0.22, incoming_start)
-            in_geometry.setKeyValueAt(0.86, incoming_overshoot)
+            in_geometry.setKeyValueAt(0.36, incoming_start)
+            in_geometry.setKeyValueAt(0.9, incoming_overshoot)
             in_geometry.setEndValue(target)
 
             in_fade = QPropertyAnimation(self._incoming_effect, b"opacity", self)
-            in_fade.setDuration(380)
+            in_fade.setDuration(580)
             in_fade.setEasingCurve(QEasingCurve.Type.OutQuad)
             in_fade.setStartValue(0.0)
-            in_fade.setKeyValueAt(0.22, 0.0)
+            in_fade.setKeyValueAt(0.34, 0.0)
             in_fade.setEndValue(1.0)
 
             transition = QParallelAnimationGroup(self)
@@ -1757,7 +1954,7 @@ class MainWindow(QMainWindow):
         self._incoming_card = previous_active
         self._incoming_effect = previous_active_effect
 
-        target = self._preview_rect()
+        target = self._preview_target_rect()
         self._active_card.setGeometry(target)
         self._active_card.setVisible(True)
         self._active_effect.setOpacity(1.0)
@@ -1784,7 +1981,23 @@ class MainWindow(QMainWindow):
 
     def _toggle_details(self) -> None:
         visible = self._info_panel.toggle_details()
-        self._status.setText("Details expanded." if visible else "Details hidden.")
+        self._is_detail_mode = visible
+        if visible:
+            self._main_splitter.setSizes([260, 900, 260])
+        else:
+            self._main_splitter.setSizes([320, 980, 0 if not self._reason_panel.isVisible() else 260])
+        self._active_card.set_focus_mode(visible)
+        self._incoming_card.set_focus_mode(visible)
+        if not self._is_animating:
+            target = self._preview_target_rect()
+            geometry_anim = QPropertyAnimation(self._active_card, b"geometry", self)
+            geometry_anim.setDuration(220)
+            geometry_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            geometry_anim.setStartValue(self._active_card.geometry())
+            geometry_anim.setEndValue(target)
+            geometry_anim.start()
+            self._active_animation = None
+        self._status.setText("Details expanded with enlarged preview." if visible else "Details hidden.")
 
     def _open_file(self) -> None:
         if not self._files:
@@ -1810,35 +2023,5 @@ class MainWindow(QMainWindow):
             return
         self._status.setText("Training mode active.")
 
-    def _compute_file_hash(self, raw_path: str) -> str | None:
-        return compute_file_hash(Path(raw_path))
     def _compute_file_hash(self, raw_path: str, *, max_bytes: int | None = None) -> str | None:
-        file_path = Path(raw_path)
-        if not file_path.exists() or not file_path.is_file():
-            return None
-
-        digest = sha256()
-        consumed = 0
-        try:
-            with file_path.open("rb") as handle:
-                while True:
-                    block = handle.read(1024 * 1024)
-                    if not block:
-                        break
-                    if max_bytes is not None and consumed >= max_bytes:
-                        break
-                    if max_bytes is not None and consumed + len(block) > max_bytes:
-                        block = block[: max_bytes - consumed]
-                    digest.update(block)
-                    consumed += len(block)
-                    if max_bytes is not None and consumed >= max_bytes:
-                        LOGGER.info(
-                            "Partial hash generated for %s at %d bytes (limit=%d)",
-                            raw_path,
-                            consumed,
-                            max_bytes,
-                        )
-                        break
-        except Exception:
-            return None
-        return digest.hexdigest()
+        return compute_file_hash(Path(raw_path), max_bytes=max_bytes)

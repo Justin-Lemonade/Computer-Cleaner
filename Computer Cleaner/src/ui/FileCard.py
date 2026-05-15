@@ -13,6 +13,9 @@ class FileCard(QFrame):
         super().__init__()
         self.setObjectName("PreviewCard")
         self.setMinimumSize(520, 340)
+        self._focus_mode = False
+        self._last_preview_path = ""
+        self._last_file_data: Mapping[str, Any] | None = None
         self._loading_frames = ("Loading", "Loading.", "Loading..", "Loading...")
         self._loading_index = 0
 
@@ -113,19 +116,32 @@ class FileCard(QFrame):
         )
 
     def set_file(self, file_data: Mapping[str, Any]) -> None:
+        self._last_file_data = file_data
         filename = str(file_data.get("filename") or "Unnamed file")
         self._title.setText(filename)
         self._preview_label.setText(self._friendly_preview_label(file_data))
         preview_path_raw = file_data.get("preview_path")
-        preview_path = str(preview_path_raw) if preview_path_raw else ""
+        self._last_preview_path = str(preview_path_raw) if preview_path_raw else ""
         self._asset.clear()
+        self._render_asset()
+
+    def set_focus_mode(self, enabled: bool) -> None:
+        self._focus_mode = enabled
+        if self._last_file_data is None:
+            return
+        self._render_asset()
+
+    def _render_asset(self) -> None:
+        preview_path = self._last_preview_path
 
         if preview_path.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")):
             pixmap = QPixmap(preview_path)
             if not pixmap.isNull():
+                max_w = 760 if self._focus_mode else 480
+                max_h = 500 if self._focus_mode else 280
                 scaled = pixmap.scaled(
-                    480,
-                    280,
+                    max_w,
+                    max_h,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
@@ -134,7 +150,8 @@ class FileCard(QFrame):
 
         if preview_path.lower().endswith(".txt"):
             try:
-                snippet = Path(preview_path).read_text(encoding="utf-8", errors="replace")[:500].strip()
+                max_chars = 1400 if self._focus_mode else 500
+                snippet = Path(preview_path).read_text(encoding="utf-8", errors="replace")[:max_chars].strip()
                 if snippet:
                     self._asset.setText(snippet)
                     return
