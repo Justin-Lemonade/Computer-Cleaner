@@ -80,3 +80,15 @@ The current repository has legacy folders and files that need a confirmed refact
 - `backend/` is still a root-level source folder and needs a separate placement decision.
 - Runtime/generated folders such as `venv/`, `venv.broken/`, `.uv-cache/`, `.python/`, `__pycache__/`, and `Microsoft/` should be reviewed before cleanup.
 - Update logs are now under `AI Resources/Update Logs/`.
+
+
+## Repo-managed Claude/Codex skill bootstrap
+
+This repository now vendors skills under `AI Resources/Claude-Codex-Skills/` and can bootstrap both Claude and Codex local skill folders:
+
+```bash
+cd "Computer Cleaner"
+bash scripts/install_skills.sh
+```
+
+Use `bash scripts/install_skills.sh copy` if symlinks are not desired.

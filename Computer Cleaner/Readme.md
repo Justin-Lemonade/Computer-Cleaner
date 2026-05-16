@@ -28,3 +28,23 @@ Runtime data is stored under `data/`:
 - `data/previews/` generated previews (PDF renders, extracted text, etc.)
 - `data/thumbnails/` generated thumbnails
 - `data/logs/` log files
+
+
+## Install Claude/Codex skills (repo-managed)
+
+After cloning, install project-managed skills into local Claude/Codex skill folders:
+
+```bash
+cd "Computer Cleaner"
+bash scripts/install_skills.sh            # symlink mode (default)
+bash scripts/install_skills.sh copy       # copy mode
+```
+
+Installed skill set includes:
+- TDD Guard
+- Context Engineering Kit
+- Claude Scientific Skills
+- Claude Mem
+- Existing non-excluded project skills from `AI Resources/Skills/`
+
+Excluded from this repo-managed pack: SEO, marketing, code security, humanizer.

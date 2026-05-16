@@ -24,3 +24,5 @@ PySide6
 
 fastapi
 pydantic
+
+# Skill bootstrap uses standard shell tools only (bash, cp, ln).
