@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from Config import CONFIG
+from core.history.SortedFileRegistry import SortedFileRegistry
 from preview.FilePreviewEngine import (
     FilePreviewEngine,
     ProcessingStats,
@@ -27,10 +28,14 @@ def scan_folder_recursively(folder: Path) -> list[Path]:
 
 
 def process_folder_to_queue(engine: FilePreviewEngine, folder: Path) -> dict[str, Any]:
+    sorted_registry = SortedFileRegistry()
     queue: list[dict[str, Any]] = []
     stats = ProcessingStats()
 
     for file_path in scan_folder_recursively(folder):
+        normalized_path = sorted_registry.normalize_path(file_path)
+        if sorted_registry.is_sorted(normalized_path):
+            continue
         try:
             result = engine.process_file(file_path)
             queue.append(result)
