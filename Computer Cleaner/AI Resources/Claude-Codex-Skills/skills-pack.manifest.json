@@ -1,0 +1,15 @@
+{
+  "pack": "claude-codex-skills",
+  "excluded": ["seo", "marketing", "code-security", "humanizer"],
+  "included": [
+    "tdd-guard",
+    "context-engineering-kit",
+    "claude-scientific-skills",
+    "claude-mem",
+    "app-architecture",
+    "chatgpt-apps",
+    "frontend-agent",
+    "frontend-design",
+    "mcp-brave-search"
+  ]
+}
