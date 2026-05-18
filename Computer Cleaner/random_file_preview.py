@@ -4,10 +4,12 @@ import argparse
 import json
 import random
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from Config import CONFIG
+from database.Db import find_file_by_hash, find_file_by_path_signature
 from preview.FilePreviewEngine import (
     FilePreviewEngine,
     ProcessingStats,
@@ -15,6 +17,7 @@ from preview.FilePreviewEngine import (
     is_hidden_file,
     is_system_or_executable,
 )
+from utils.Hashing import compute_file_hash
 
 DEFAULT_ALLOWED_FOLDERS = ["~/Documents", "~/Downloads", "~/Desktop"]
 
@@ -26,13 +29,41 @@ def resolve_allowed_folders(user_selected: list[str] | None = None) -> list[Path
     return [folder for folder in allowed if folder.exists() and folder.is_dir()]
 
 
-def gather_candidate_files(allowed_folders: list[Path]) -> list[Path]:
+def _modified_datetime(path: Path) -> datetime | None:
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime)
+    except Exception:
+        return None
+
+
+def is_sorted_file(path: Path) -> bool:
+    """Return True when the local queue DB says this path or content was sorted."""
+    try:
+        stat = path.stat()
+        path_row = find_file_by_path_signature(
+            path=str(path),
+            modified_date=_modified_datetime(path),
+            size=int(stat.st_size),
+        )
+        if path_row is not None and int(path_row["already_sorted"] or 0) == 1:
+            return True
+
+        file_hash = compute_file_hash(path)
+        hash_row = find_file_by_hash(file_hash) if file_hash else None
+        return hash_row is not None and int(hash_row["already_sorted"] or 0) == 1
+    except Exception:
+        return False
+
+
+def gather_candidate_files(allowed_folders: list[Path], *, include_sorted: bool = False) -> list[Path]:
     candidates: list[Path] = []
     for root in allowed_folders:
         for path in root.rglob("*"):
             if not path.is_file():
                 continue
             if is_hidden_file(path) or is_system_or_executable(path):
+                continue
+            if not include_sorted and is_sorted_file(path):
                 continue
             candidates.append(path)
     return candidates

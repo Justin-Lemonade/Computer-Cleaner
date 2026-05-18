@@ -1,0 +1,129 @@
+<%--
+//
+// DefaultWsdlHelpGenerator.aspx:
+//
+// Author:
+//   Lluis Sanchez Gual (lluis@ximian.com)
+//
+// (C) 2003 Ximian, Inc.  http://www.ximian.com
+//
+--%>
+<%@ Import Namespace="System.Collections" %>
+<%@ Import Namespace="System.Collections.Generic" %>
+<%@ Import Namespace="System.IO" %>
+<%@ Import Namespace="System.Xml.Serialization" %>
+<%@ Import Namespace="System.Xml" %>
+<%@ Import Namespace="System.Xml.Schema" %>
+<%@ Import Namespace="System.Web.Services" %>
+<%@ Import Namespace="System.Web.Services.Description" %>
+<%@ Import Namespace="System.Web.Services.Configuration" %>
+<%@ Import Namespace="System.Web.Configuration" %>
+<%@ Import Namespace="System" %>
+<%@ Import Namespace="System.Net" %>
+<%@ Import Namespace="System.Globalization" %>
+<%@ Import Namespace="System.Resources" %>
+<%@ Import Namespace="System.Diagnostics" %>
+<%@ Import Namespace="System.CodeDom" %>
+<%@ Import Namespace="System.CodeDom.Compiler" %>
+<%@ Import Namespace="Microsoft.CSharp" %>
+<%@ Import Namespace="Microsoft.VisualBasic" %>
+<%@ Import Namespace="System.Text" %>
+<%@ Import Namespace="System.Text.RegularExpressions" %>
+<%@ Import Namespace="System.Security.Cryptography.X509Certificates" %>
+<%@ Assembly name="System.Web.Services" %>
+<%@ Page debug="true" %>
+<%
+Response.Write ("
+");
+%>
+<%=WebServiceName%> Web Service
+Web Service
+<%=WebServiceName%>
+Overview
+Service Description
+Client proxy
+<%#FormatBindingName(DataBinder.Eval(Container.DataItem, "Name").ToString())%>
+op=<%#GetOpName(Container.DataItem)%>&bnd=<%#DataBinder.Eval(Container.DataItem, "Binding.Name")%>"><%#GetOpName(Container.DataItem)%>
+<% if (CurrentPage == "main") {%>
+Web Service Overview
+<%=WebServiceDescription%>
+<% if (ProfileViolations != null && ProfileViolations.Count > 0) { %>
+Basic Profile Conformance
+This web service does not conform to WS-I Basic Profile v1.1
+<%
+Response.Write ("
+");
+foreach (BasicProfileViolation vio in ProfileViolations) {
+Response.Write ("
+" + vio.NormativeStatement + "
+: " + vio.Details);
+Response.Write ("
+");
+foreach (string ele in vio.Elements)
+Response.Write ("
+" + ele + "
+");
+Response.Write ("
+");
+Response.Write ("
+");
+}
+Response.Write ("
+");
+}%>
+<%} if (DefaultBinding == null) {%>
+This service does not contain any public web method.
+<%} else if (CurrentPage == "op") {%>
+<%=CurrentOperationName%>
+<% WriteTabs (); %>
+<% if (CurrentTab == "main") { %>
+Input Parameters
+<% if (InParams.Count == 0) { %>
+No input parameters
+<% } else { %>
+<%#DataBinder.Eval(Container.DataItem, "Name")%>
+<%#DataBinder.Eval(Container.DataItem, "Type")%>
+<% } %>
+<% if (OutParams.Count > 0) { %>
+Output Parameters
+<%#DataBinder.Eval(Container.DataItem, "Name")%>
+<%#DataBinder.Eval(Container.DataItem, "Type")%>
+<% } %>
+Remarks
+<%=OperationDocumentation%>
+Technical information
+Format: <%=CurrentOperationFormat%>
+Supported protocols: <%=CurrentOperationProtocols%>
+<% } %>
+<% if (CurrentTab == "test") {
+if (CurrentOperationSupportsTest) {%>
+Enter values for the parameters and click the 'Invoke' button to test this method:
+<%#DataBinder.Eval(Container.DataItem, "Name")%>:
+">
+">
+The web service returned the following result:
+<% } else {%>
+The test form is not available for this operation because it has parameters with a complex structure.
+<% } %>
+<% } %>
+<% if (CurrentTab == "msg") { %>
+The following are sample SOAP requests and responses for each protocol supported by this method:
+<% if (IsOperationSupported ("Soap")) { %>
+Soap
+<%=GenerateOperationMessages ("Soap", true)%>
+<%=GenerateOperationMessages ("Soap", false)%>
+<% } %>
+<% if (IsOperationSupported ("HttpGet")) { %>
+HTTP Get
+<%=GenerateOperationMessages ("HttpGet", true)%>
+<%=GenerateOperationMessages ("HttpGet", false)%>
+<% } %>
+<% if (IsOperationSupported ("HttpPost")) { %>
+HTTP Post
+<%=GenerateOperationMessages ("HttpPost", true)%>
+<%=GenerateOperationMessages ("HttpPost", false)%>
+<% } %>
+<% } %>
+<%} else if (CurrentPage == "proxy") {%>
+Select the language for which you want to generate a proxy
+<%=GetOptionSel("cs",Cu

@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QParallelAnimationGroup, QProcess, QPropertyAnimation, QRect, QSettings, QSize, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QFont
+from PySide6.QtCore import Property, QEasingCurve, QEvent, QPoint, QParallelAnimationGroup, QProcess, QPropertyAnimation, QRect, QSettings, QSize, Qt, QTimer
+from PySide6.QtGui import QAction, QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
-    QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
@@ -81,33 +80,80 @@ class _ActionButton(QPushButton):
         "neutral": "#8e8e8e",
     }
 
-    def __init__(self, text: str, role: str) -> None:
+    def __init__(self, text: str, role: str, *, base_size: QSize | None = None, hit_size: QSize | None = None) -> None:
         super().__init__(text)
-        self._base_size = QSize(138, 46)
-        self._hover_size = QSize(150, 52)
+        self._base_size = base_size or QSize(138, 46)
+        self._hover_size = QSize(self._base_size.width() + 10, self._base_size.height() + 5)
+        self._hit_size = hit_size or QSize(self._base_size.width() + 42, 82)
         self._role = role
-        self.setFixedSize(self._base_size)
-        self._shadow = QGraphicsDropShadowEffect(self)
-        self._shadow.setOffset(0, 10)
-        self._shadow.setBlurRadius(22)
-        self._shadow.setColor(QColor(0, 0, 0, 0))
-        self.setGraphicsEffect(self._shadow)
+        self._hover_progress = 0.0
+        self._hover_animation = QPropertyAnimation(self, b"hoverProgress", self)
+        self._hover_animation.setDuration(120)
+        self._hover_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.setFixedSize(self._hit_size)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
     def enterEvent(self, event) -> None:
-        self.setFixedSize(self._hover_size)
-        self._shadow.setBlurRadius(44)
-        self._shadow.setOffset(0, 14)
-        color = QColor(self._ROLE_COLORS.get(self._role, "#8e8e8e"))
-        color.setAlpha(190)
-        self._shadow.setColor(color)
+        self._animate_hover(1.0)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self.setFixedSize(self._base_size)
-        self._shadow.setBlurRadius(22)
-        self._shadow.setOffset(0, 10)
-        self._shadow.setColor(QColor(0, 0, 0, 0))
+        self._animate_hover(0.0)
         super().leaveEvent(event)
+
+    def sizeHint(self) -> QSize:
+        return self._hit_size
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        progress = self._hover_progress
+        width = self._base_size.width() + int((self._hover_size.width() - self._base_size.width()) * progress)
+        height = self._base_size.height() + int((self._hover_size.height() - self._base_size.height()) * progress)
+        bottom = self.height() - 24
+        rect = QRect((self.width() - width) // 2, bottom - height, width, height)
+
+        role_color = QColor(self._ROLE_COLORS.get(self._role, "#8e8e8e"))
+        if progress > 0:
+            for idx, expand in enumerate((10, 8, 6, 4)):
+                alpha = int((24 - idx * 4) * progress)
+                glow = QColor(role_color)
+                glow.setAlpha(alpha)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(glow)
+                painter.drawRoundedRect(rect.adjusted(-expand, -expand // 3, expand, expand), 14 + expand // 2, 14 + expand // 2)
+
+        border = QColor(role_color)
+        border.setAlpha(195 if progress else 125)
+        fill = QColor("#101010")
+        if progress:
+            fill = QColor("#151515")
+        painter.setBrush(fill)
+        painter.setPen(QPen(border, 1.25))
+        painter.drawRoundedRect(rect, 10, 10)
+
+        font = QFont("Segoe UI")
+        font.setPixelSize(12)
+        font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+        painter.setPen(QColor("#ffffff"))
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.text())
+
+    def _animate_hover(self, target: float) -> None:
+        self._hover_animation.stop()
+        self._hover_animation.setStartValue(self._hover_progress)
+        self._hover_animation.setEndValue(target)
+        self._hover_animation.start()
+
+    def _get_hover_progress(self) -> float:
+        return self._hover_progress
+
+    def _set_hover_progress(self, value: float) -> None:
+        self._hover_progress = max(0.0, min(1.0, float(value)))
+        self.update()
+
+    hoverProgress = Property(float, _get_hover_progress, _set_hover_progress)
 
 
 class _AlignedMenuButton(QToolButton):
@@ -163,8 +209,9 @@ class _ModeSelector(QFrame):
         self._modes = ["Training", "Testing", "Automation"]
         self._active_mode = "Training"
         self._button_size = button_size
-        self._padding = 8
+        self._padding = 10
         self._spacing = 10
+        self._button_y = self._padding
         self._expanded = False
         self._active_animation: QParallelAnimationGroup | None = None
         self._buttons: dict[str, QPushButton] = {}
@@ -200,12 +247,6 @@ class _ModeSelector(QFrame):
             self._buttons[mode] = button
             self._effects[mode] = effect
 
-        self._selector_glow = QGraphicsDropShadowEffect(self)
-        self._selector_glow.setOffset(0, 0)
-        self._selector_glow.setBlurRadius(0)
-        self._selector_glow.setColor(QColor(25, 195, 125, 0))
-        self.setGraphicsEffect(self._selector_glow)
-
         self._arrange(immediate=True)
         self.setStyleSheet(
             """
@@ -213,6 +254,10 @@ class _ModeSelector(QFrame):
                 background: #171717;
                 border: 1px solid #2f2f2f;
                 border-radius: 12px;
+            }
+            QFrame#ModeSelector:hover {
+                background: #191b1a;
+                border: 1px solid #2f6f53;
             }
             """
         )
@@ -227,15 +272,11 @@ class _ModeSelector(QFrame):
 
     def enterEvent(self, event) -> None:
         self._expanded = True
-        self._selector_glow.setBlurRadius(16)
-        self._selector_glow.setColor(QColor(25, 195, 125, 55))
         self._arrange(immediate=False)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
         self._expanded = False
-        self._selector_glow.setBlurRadius(0)
-        self._selector_glow.setColor(QColor(25, 195, 125, 0))
         self._arrange(immediate=False)
         super().leaveEvent(event)
 
@@ -264,6 +305,10 @@ class _ModeSelector(QFrame):
                 self._effects[mode].setOpacity(1.0)
 
     def _arrange(self, *, immediate: bool) -> None:
+        if self._active_animation is not None:
+            self._active_animation.stop()
+            self._active_animation = None
+
         self._apply_mode_visual_state()
 
         target_width = self._expanded_width if self._expanded else self._collapsed_width
@@ -278,7 +323,7 @@ class _ModeSelector(QFrame):
                 else:
                     # All buttons at collapsed_x; only active is visible (others opacity=0)
                     x = self._collapsed_x
-                button.move(x, self._padding)
+                button.move(x, self._button_y)
             return
 
         group = QParallelAnimationGroup(self)
@@ -308,7 +353,7 @@ class _ModeSelector(QFrame):
             move_anim.setDuration(150)
             move_anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
             move_anim.setStartValue(button.pos())
-            move_anim.setEndValue(QPoint(target_x, self._padding))
+            move_anim.setEndValue(QPoint(target_x, self._button_y))
             group.addAnimation(move_anim)
 
             fade_anim = QPropertyAnimation(self._effects[mode], b"opacity", self)
@@ -320,7 +365,11 @@ class _ModeSelector(QFrame):
             group.addAnimation(fade_anim)
 
         self._active_animation = group
+        group.finished.connect(self._clear_active_animation)
         group.start()
+
+    def _clear_active_animation(self) -> None:
+        self._active_animation = None
 
 
 class _BottomBar(QWidget):
@@ -786,16 +835,16 @@ class MainWindow(QMainWindow):
         dock = QWidget()
         dock.setObjectName("ActionDock")
         layout = QHBoxLayout(dock)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(16)
-        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter)
+        layout.setContentsMargins(8, 0, 8, 0)
+        layout.setSpacing(6)
+        layout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter)
 
         specs = [
-            ("DELETE", "delete", self._on_not_needed),
-            ("ARCHIVE", "archive", self._on_archive),
-            ("MORE INFO", "neutral", self._toggle_details),
-            ("OPEN FILE", "neutral", self._open_file),
-            ("SAVE", "save", self._on_keep),
+            ("Delete", "delete", self._on_not_needed),
+            ("Archive", "archive", self._on_archive),
+            ("More Info", "neutral", self._toggle_details),
+            ("Open File", "neutral", self._open_file),
+            ("Save", "save", self._on_keep),
         ]
         for text, role, callback in specs:
             button = _ActionButton(text, role)
@@ -874,11 +923,11 @@ class MainWindow(QMainWindow):
         actions_layout.setContentsMargins(0, 4, 0, 0)
         actions_layout.setSpacing(12)
 
-        random_button = _ActionButton("Choose Random Folder", "neutral")
+        random_button = _ActionButton("Random Folder", "neutral", base_size=QSize(166, 46), hit_size=QSize(204, 82))
         random_button.setObjectName("EmptyStateActionButton")
         random_button.clicked.connect(self._choose_random_folder)
 
-        select_button = _ActionButton("Select", "save")
+        select_button = _ActionButton("Select Folder", "save", base_size=QSize(150, 46), hit_size=QSize(188, 82))
         select_button.setObjectName("EmptyStateActionButton")
         select_button.clicked.connect(self._select_folder)
 
@@ -978,38 +1027,12 @@ class MainWindow(QMainWindow):
                 padding: 8px 10px;
             }
             QPushButton#ActionButton {
-                border: 1px solid #3b3b3b;
-                border-radius: 10px;
-                background: #0e0e0e;
+                border: none;
+                background: transparent;
                 color: #ffffff;
                 font-size: 12px;
                 font-weight: 600;
-                text-align: center;
-                padding: 8px 10px;
-            }
-            QPushButton#ActionButton[role="neutral"] {
-                border-color: #5a5a5a;
-            }
-            QPushButton#ActionButton[role="neutral"]:hover {
-                color: #d1d1d1;
-            }
-            QPushButton#ActionButton[role="save"] {
-                border-color: #19c37d;
-            }
-            QPushButton#ActionButton[role="save"]:hover {
-                color: #19c37d;
-            }
-            QPushButton#ActionButton[role="archive"] {
-                border-color: #e3ad2b;
-            }
-            QPushButton#ActionButton[role="archive"]:hover {
-                color: #e3ad2b;
-            }
-            QPushButton#ActionButton[role="delete"] {
-                border-color: #ff5b5b;
-            }
-            QPushButton#ActionButton[role="delete"]:hover {
-                color: #ff5b5b;
+                padding: 0px;
             }
             QToolButton#MenuButton {
                 border: 1px solid #2f2f2f;
@@ -1462,12 +1485,61 @@ class MainWindow(QMainWindow):
         ]
         return [folder for folder in candidates if folder.exists() and folder.is_dir()]
 
+    def _random_folder_candidates(self) -> list[Path]:
+        folders: list[Path] = []
+        seen: set[str] = set()
+        for root in self._common_user_folders():
+            for folder in [root, *[path for path in root.iterdir() if path.is_dir()]]:
+                key = self._normalize_path_key(str(folder))
+                if key not in seen:
+                    seen.add(key)
+                    folders.append(folder)
+        random.shuffle(folders)
+        return folders
+
+    def _folder_has_queueable_file(self, folder: Path, *, max_checked: int = 60) -> bool:
+        checked = 0
+        try:
+            paths = iter_files(folder)
+        except Exception:
+            LOGGER.exception("Failed to inspect random-folder candidate %s", folder)
+            return False
+        for file_path in paths:
+            checked += 1
+            if checked > max_checked:
+                return True
+            try:
+                metadata = get_basic_metadata(file_path)
+                path_text = str(metadata.path)
+                if self._normalize_path_key(path_text) in self._queued_paths:
+                    continue
+                path_row = find_file_by_path_signature(
+                    path=path_text,
+                    modified_date=metadata.modified_date,
+                    size=int(metadata.size or 0),
+                )
+                if path_row is not None and int(path_row["already_sorted"] or 0) == 1:
+                    continue
+                hash_value = compute_file_hash(file_path, max_bytes=HASH_MAX_BYTES)
+                if hash_value and hash_value in self._queued_hashes:
+                    continue
+                hash_row = find_file_by_hash(hash_value) if hash_value else None
+                if hash_row is not None and int(hash_row["already_sorted"] or 0) == 1:
+                    continue
+                return True
+            except Exception:
+                LOGGER.exception("Failed to inspect random-folder file %s", file_path)
+                continue
+        return False
+
     def _random_folder_choice(self) -> Path | None:
-        folders = self._common_user_folders()
+        folders = self._random_folder_candidates()
         if not folders:
             return None
 
-        candidates = folders[:]
+        candidates = [folder for folder in folders if self._folder_has_queueable_file(folder)]
+        if not candidates:
+            return None
         if self._source_folder is not None and len(candidates) > 1:
             candidates = [folder for folder in candidates if folder.resolve() != self._source_folder.resolve()] or candidates
         return random.choice(candidates)
@@ -1486,7 +1558,7 @@ class MainWindow(QMainWindow):
     def _choose_random_folder(self) -> None:
         selected = self._random_folder_choice()
         if selected is None:
-            self._status.setText("No common user folders were found.")
+            self._status.setText("No random folder with unsorted queueable files was found.")
             return
         mode = self._resolve_folder_load_mode()
         if mode == "cancel":
@@ -1899,31 +1971,33 @@ class MainWindow(QMainWindow):
             self._incoming_effect.setOpacity(0.0)
 
             out_geometry = QPropertyAnimation(self._active_card, b"geometry", self)
-            out_geometry.setDuration(540)
-            out_geometry.setEasingCurve(QEasingCurve.Type.InOutCubic)
+            out_geometry.setDuration(640)
+            out_geometry.setEasingCurve(QEasingCurve.Type.InOutQuart)
             out_geometry.setStartValue(outgoing_start)
-            out_geometry.setKeyValueAt(0.52, outgoing_mid)
+            out_geometry.setKeyValueAt(0.58, outgoing_mid)
             out_geometry.setEndValue(outgoing_end)
 
             out_fade = QPropertyAnimation(self._active_effect, b"opacity", self)
-            out_fade.setDuration(520)
+            out_fade.setDuration(640)
             out_fade.setEasingCurve(QEasingCurve.Type.InOutQuad)
             out_fade.setStartValue(1.0)
-            out_fade.setEndValue(0.0)
+            out_fade.setKeyValueAt(0.62, 0.92)
+            out_fade.setKeyValueAt(0.86, 0.72)
+            out_fade.setEndValue(0.18)
 
             in_geometry = QPropertyAnimation(self._incoming_card, b"geometry", self)
-            in_geometry.setDuration(620)
+            in_geometry.setDuration(700)
             in_geometry.setEasingCurve(QEasingCurve.Type.OutQuart)
             in_geometry.setStartValue(incoming_start)
-            in_geometry.setKeyValueAt(0.36, incoming_start)
+            in_geometry.setKeyValueAt(0.42, incoming_start)
             in_geometry.setKeyValueAt(0.9, incoming_overshoot)
             in_geometry.setEndValue(target)
 
             in_fade = QPropertyAnimation(self._incoming_effect, b"opacity", self)
-            in_fade.setDuration(580)
+            in_fade.setDuration(680)
             in_fade.setEasingCurve(QEasingCurve.Type.OutQuad)
             in_fade.setStartValue(0.0)
-            in_fade.setKeyValueAt(0.34, 0.0)
+            in_fade.setKeyValueAt(0.40, 0.0)
             in_fade.setEndValue(1.0)
 
             transition = QParallelAnimationGroup(self)
