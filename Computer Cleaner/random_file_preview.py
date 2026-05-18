@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from Config import CONFIG
-from database.Db import find_file_by_hash, find_file_by_path_signature
+from core.history.SortedFileRegistry import SortedFileRegistry
 from preview.FilePreviewEngine import (
     FilePreviewEngine,
     ProcessingStats,
@@ -18,6 +18,8 @@ from preview.FilePreviewEngine import (
     is_system_or_executable,
 )
 from utils.Hashing import compute_file_hash
+
+SORTED_REGISTRY = SortedFileRegistry()
 
 DEFAULT_ALLOWED_FOLDERS = ["~/Documents", "~/Downloads", "~/Desktop"]
 
@@ -37,20 +39,13 @@ def _modified_datetime(path: Path) -> datetime | None:
 
 
 def is_sorted_file(path: Path) -> bool:
-    """Return True when the local queue DB says this path or content was sorted."""
+    """Return True when swipe history says this path or content hash was already sorted."""
     try:
-        stat = path.stat()
-        path_row = find_file_by_path_signature(
-            path=str(path),
-            modified_date=_modified_datetime(path),
-            size=int(stat.st_size),
-        )
-        if path_row is not None and int(path_row["already_sorted"] or 0) == 1:
+        normalized = SORTED_REGISTRY.normalize_path(path)
+        if SORTED_REGISTRY.is_sorted(normalized):
             return True
-
         file_hash = compute_file_hash(path)
-        hash_row = find_file_by_hash(file_hash) if file_hash else None
-        return hash_row is not None and int(hash_row["already_sorted"] or 0) == 1
+        return SORTED_REGISTRY.is_sorted_hash(file_hash)
     except Exception:
         return False
 

@@ -7,17 +7,17 @@ from pathlib import Path
 import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-for import_path in (PROJECT_ROOT / "src" / "data", PROJECT_ROOT / "src" / "core", PROJECT_ROOT / "src"):
+for import_path in (PROJECT_ROOT / "src", PROJECT_ROOT / "src" / "data", PROJECT_ROOT / "src" / "core"):
     sys.path.insert(0, str(import_path))
 
 from Config import CONFIG
+from core.history.SortedFileRegistry import SortedFileRegistry
 from backend.db.schema import init_swipe_schema
 from database.Db import get_connection, init_db
-from random_file_preview import gather_candidate_files
 from utils.Hashing import compute_file_hash
 
 
-class RandomFilePreviewTests(unittest.TestCase):
+class SortedFileRegistryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.root = Path(self.temp_dir.name)
@@ -26,7 +26,6 @@ class RandomFilePreviewTests(unittest.TestCase):
         self.old_previews_dir = CONFIG.previews_dir
         self.old_thumbnails_dir = CONFIG.thumbnails_dir
         self.old_logs_dir = CONFIG.logs_dir
-
         object.__setattr__(CONFIG, "data_dir", self.root / "data")
         object.__setattr__(CONFIG, "previews_dir", self.root / "data" / "previews")
         object.__setattr__(CONFIG, "thumbnails_dir", self.root / "data" / "thumbnails")
@@ -43,29 +42,20 @@ class RandomFilePreviewTests(unittest.TestCase):
         object.__setattr__(CONFIG, "logs_dir", self.old_logs_dir)
         self.temp_dir.cleanup()
 
-    def test_gather_candidate_files_skips_already_sorted_files(self) -> None:
-        source = self.root / "source"
-        source.mkdir()
-        sorted_file = source / "sorted.txt"
-        unsorted_file = source / "unsorted.txt"
-        sorted_file.write_text("sorted", encoding="utf-8")
-        unsorted_file.write_text("unsorted", encoding="utf-8")
-
-        normalized_path = str(sorted_file.resolve())
-        file_hash = compute_file_hash(sorted_file)
+    def test_sorted_registry_survives_files_cache_clear(self) -> None:
+        path = self.root / "a.txt"
+        path.write_text("abc", encoding="utf-8")
+        reg = SortedFileRegistry()
+        normalized = reg.normalize_path(path)
+        file_hash = compute_file_hash(path)
         now = datetime.utcnow().isoformat()
         with get_connection() as conn:
             conn.execute(
                 """INSERT INTO swipes (id,file_path,file_name,file_type,file_size,folder_path,decision,timestamp,file_hash,source,user_override,reviewed,is_active,created_at)
-                VALUES ('1', ?, 'sorted.txt', 'txt', ?, ?, 'KEEP', ?, ?, 'human', 0, 0, 1, ?);""",
-                (normalized_path, sorted_file.stat().st_size, str(source), now, file_hash, now),
+                VALUES ('1', ?, 'a.txt', 'txt', 3, ?, 'KEEP', ?, ?, 'human', 0, 0, 1, ?);""",
+                (normalized, str(path.parent), now, file_hash, now),
             )
+            conn.execute("DELETE FROM files;")
+        self.assertTrue(reg.is_sorted(path))
+        self.assertTrue(reg.is_sorted_hash(file_hash))
 
-        candidates = gather_candidate_files([source])
-
-        self.assertNotIn(sorted_file, candidates)
-        self.assertIn(unsorted_file, candidates)
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -63,3 +63,15 @@ def init_swipe_schema(db_path: str | Path) -> None:
             ON swipes(is_active, timestamp DESC);
             """
         )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_swipes_active_path
+            ON swipes(is_active, file_path);
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_swipes_active_hash
+            ON swipes(is_active, file_hash);
+            """
+        )

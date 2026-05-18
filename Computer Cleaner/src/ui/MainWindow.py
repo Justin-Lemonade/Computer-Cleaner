@@ -38,9 +38,8 @@ from PySide6.QtWidgets import (
 from Config import CONFIG
 from backend.models.swipe_model import SwipeCreate, SwipeDecision, SwipeSource
 from backend.services.swipe_service import SwipeService
+from core.history.SortedFileRegistry import SortedFileRegistry
 from database.Db import (
-    find_file_by_hash,
-    find_file_by_path_signature,
     get_connection,
     list_files,
     mark_file_seen,
@@ -598,6 +597,7 @@ class MainWindow(QMainWindow):
         self._swipe_watchdog.timeout.connect(self._on_swipe_timeout)
         self._pending_post_reason: dict[str, Any] | None = None
         self._swipe_service = SwipeService(CONFIG.db_path)
+        self._sorted_registry = SortedFileRegistry()
 
         root = QWidget()
         root_layout = QVBoxLayout(root)
@@ -1313,6 +1313,11 @@ class MainWindow(QMainWindow):
                     result.error or "unknown error",
                 )
                 continue
+            if self._sorted_registry.is_sorted(result.row.get("path") or ""):
+                continue
+            row_hash = str(result.row.get("file_hash") or "")
+            if row_hash and self._sorted_registry.is_sorted_hash(row_hash):
+                continue
             self._files.append(result.row)
             self._register_queued_row(result.row)
             added += 1
@@ -1329,84 +1334,27 @@ class MainWindow(QMainWindow):
 
     def _build_row_for_path(self, file_path: Path) -> dict[str, Any] | None:
         metadata = get_basic_metadata(file_path)
-        path_text = str(metadata.path)
+        path_text = self._sorted_registry.normalize_path(str(metadata.path))
         path_key = self._normalize_path_key(path_text)
         size = int(metadata.size or 0)
 
         if path_key in self._queued_paths:
             return None
-
-        existing_path_row = find_file_by_path_signature(
-            path=path_text,
-            modified_date=metadata.modified_date,
-            size=size,
-        )
-        if existing_path_row is not None:
-            existing_file_id = int(existing_path_row["id"])
-            existing_hash = str(existing_path_row["file_hash"] or "")
-            existing_preview = self._valid_preview_path(existing_path_row["preview_path"])
-            mark_file_seen(
-                file_id=existing_file_id,
-                path=path_text,
-                modified_date=metadata.modified_date,
-                preview_path=existing_preview,
-                file_hash=existing_hash or None,
-            )
-            if int(existing_path_row["already_sorted"] or 0) == 1:
-                LOGGER.info("Skipping sorted file by path signature: %s", path_text)
-                return None
-            if existing_hash and existing_hash in self._queued_hashes:
-                return None
-            if existing_preview is None and size <= MAX_PREVIEW_FILE_SIZE_BYTES:
-                built_preview = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
-                existing_preview = self._valid_preview_path(str(built_preview) if built_preview else None)
-                mark_file_seen(
-                    file_id=existing_file_id,
-                    path=path_text,
-                    modified_date=metadata.modified_date,
-                    preview_path=existing_preview,
-                    file_hash=existing_hash or None,
-                )
-            return {
-                "id": existing_file_id,
-                "path": path_text,
-                "filename": metadata.filename,
-                "filetype": metadata.filetype,
-                "mime_type": metadata.mime_type,
-                "size": size,
-                "created_date": metadata.created_date.isoformat() if metadata.created_date else None,
-                "modified_date": metadata.modified_date.isoformat() if metadata.modified_date else None,
-                "preview_path": existing_preview,
-                "file_hash": existing_hash or None,
-            }
+        if self._sorted_registry.is_sorted(path_text):
+            LOGGER.info("Skipping sorted file by swipe history (path): %s", path_text)
+            return None
 
         hash_value = compute_file_hash(file_path)
         if hash_value and hash_value in self._queued_hashes:
             return None
-
-        existing_hash_row = find_file_by_hash(hash_value) if hash_value else None
-        if existing_hash_row is not None:
-            existing_file_id = int(existing_hash_row["id"])
-            existing_preview = self._valid_preview_path(existing_hash_row["preview_path"])
-            mark_file_seen(
-                file_id=existing_file_id,
-                path=path_text,
-                modified_date=metadata.modified_date,
-                preview_path=existing_preview,
-                file_hash=hash_value,
-            )
-            if int(existing_hash_row["already_sorted"] or 0) == 1:
-                LOGGER.info("Skipping sorted file by hash match: %s", path_text)
-                return None
+        if hash_value and self._sorted_registry.is_sorted_hash(hash_value):
+            LOGGER.info("Skipping sorted file by swipe history (hash): %s", path_text)
+            return None
 
         preview_path = None
-        preview_reused = self._valid_preview_path(existing_hash_row["preview_path"]) if existing_hash_row is not None else None
-        if preview_reused is not None:
-            preview_path = preview_reused
         if size <= MAX_PREVIEW_FILE_SIZE_BYTES:
-            if preview_path is None:
-                built_preview = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
-                preview_path = self._valid_preview_path(str(built_preview) if built_preview else None)
+            built_preview = build_preview(file_path, mime_type=metadata.mime_type, filetype=metadata.filetype)
+            preview_path = self._valid_preview_path(str(built_preview) if built_preview else None)
         else:
             LOGGER.info("Skipping preview generation for large file %s (%d bytes)", file_path, size)
 
@@ -1513,18 +1461,13 @@ class MainWindow(QMainWindow):
                 path_text = str(metadata.path)
                 if self._normalize_path_key(path_text) in self._queued_paths:
                     continue
-                path_row = find_file_by_path_signature(
-                    path=path_text,
-                    modified_date=metadata.modified_date,
-                    size=int(metadata.size or 0),
-                )
-                if path_row is not None and int(path_row["already_sorted"] or 0) == 1:
+                normalized_path = self._sorted_registry.normalize_path(path_text)
+                if self._sorted_registry.is_sorted(normalized_path):
                     continue
                 hash_value = compute_file_hash(file_path, max_bytes=HASH_MAX_BYTES)
                 if hash_value and hash_value in self._queued_hashes:
                     continue
-                hash_row = find_file_by_hash(hash_value) if hash_value else None
-                if hash_row is not None and int(hash_row["already_sorted"] or 0) == 1:
+                if hash_value and self._sorted_registry.is_sorted_hash(hash_value):
                     continue
                 return True
             except Exception:
